@@ -42,7 +42,7 @@ class Markets:
             if user.yesPos < quantity:
                 return ValueError
             else:
-                cost = LMSRCost(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
+                cost = LMSRCost(self.b, self.outstandingYes, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes - quantity, self.outstandingNo)
                 user.points += cost
                 user.yesPos -= quantity
                 self.outstandingYes -= quantity
@@ -53,7 +53,7 @@ class Markets:
             if user.noPos < quantity:
                 return ValueError
             else: 
-                cost = LMSRCost(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
+                cost = LMSRCost(self.b, self.outstandingYes, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo - quantity)
                 user.points += cost
                 user.noPos -= quantity
                 self.outstandingNo -= quantity
