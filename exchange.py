@@ -27,12 +27,10 @@ class Markets:
             if side == 1:
                 user.yesPos += quantity
                 self.outstandingYes += quantity
-                self.AMM.yesPos -= quantity
 
             elif side == 0:
                 user.noPos += quantity
                 self.outstandingNo += quantity
-                self.AMM.noPos -= quantity
             return
         else:
             return ValueError
@@ -47,7 +45,6 @@ class Markets:
                 user.yesPos -= quantity
                 self.outstandingYes -= quantity
                 self.AMM.points -= cost
-                self.AMM.yesPos += quantity
 
         if side == 0:
             if user.noPos < quantity:
@@ -58,15 +55,12 @@ class Markets:
                 user.noPos -= quantity
                 self.outstandingNo -= quantity
                 self.AMM.points -= cost
-                self.AMM.noPos += quantity
 
 class AMM:
     def __init__(self, marketID: int, username: str, points: float=10000, yesPos: int=0, noPos: int=0):
         self.marketID = marketID
         self.username = username
         self.points = points
-        self.yesPos = yesPos
-        self.noPos = noPos
 
 class ClearingHouse:
     def __init__(self, points: dict, username: str="Clearing House",):
