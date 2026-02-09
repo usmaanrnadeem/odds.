@@ -14,7 +14,8 @@ class Markets:
         self.b = b
         self.outstandingYes = outstandingYes
         self.outstandingNo = outstandingNo
-
+        self.AMM = AMM(marketID, "AMM")
+        
     def buy(self, user: User, quantity: int ,side: bool):
         if side == 1: 
             cost = LMSRCurrentPrice(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
@@ -22,13 +23,16 @@ class Markets:
             cost = LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo + quantity) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
         if user.points >= cost:
             user.points -= cost
+            self.AMM.points += cost
             if side == 1:
                 user.yesPos += quantity
                 self.outstandingYes += quantity
+                self.AMM.yesPos -= quantity
 
             elif side == 0:
                 user.noPos += quantity
                 self.outstandingNo += quantity
+                self.AMM.noPos -= quantity
             return
         else:
             return ValueError
@@ -42,6 +46,8 @@ class Markets:
                 user.points += cost
                 user.yesPos -= quantity
                 self.outstandingYes -= quantity
+                self.AMM.points -= cost
+                self.AMM.yesPos += quantity
 
         if side == 0:
             if user.noPos < quantity:
@@ -51,9 +57,11 @@ class Markets:
                 user.points += cost
                 user.noPos -= quantity
                 self.outstandingNo -= quantity
+                self.AMM.points -= cost
+                self.AMM.noPos += quantity
 
 class AMM:
-    def __init__(self, marketID: int, username: str, points: float=0, yesPos: int=0, noPos: int=0):
+    def __init__(self, marketID: int, username: str, points: float=10000, yesPos: int=0, noPos: int=0):
         self.marketID = marketID
         self.username = username
         self.points = points
@@ -63,7 +71,7 @@ class AMM:
 class ClearingHouse:
     def __init__(self, points: dict, username: str="Clearing House",):
         self.points = points
-        self.username=username
+        self.username = username
 
 def LMSRCurrentPrice(b: float, yesQuantity: int, noQuantity: int) -> float:
 
