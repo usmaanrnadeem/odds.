@@ -32,6 +32,26 @@ class Markets:
             return
         else:
             return ValueError
+    
+    def sell(self, user: User, quantity: int, side: bool):
+        if side == 1: 
+            if user.yesPos < quantity:
+                return ValueError
+            else:
+                cost = LMSRCurrentPrice(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
+                user.points += cost
+                user.yesPos -= quantity
+                self.outstandingYes -= quantity
+
+        if side == 0:
+            if user.noPos < quantity:
+                return ValueError
+            else: 
+                cost = LMSRCurrentPrice(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
+                user.points += cost
+                user.noPos -= quantity
+                self.outstandingNo -= quantity
+
 class AMM:
     def __init__(self, marketID: int, username: str, points: float=0, yesPos: int=0, noPos: int=0):
         self.marketID = marketID
