@@ -18,9 +18,9 @@ class Markets:
         
     def buy(self, user: User, quantity: int ,side: bool):
         if side == 1: 
-            cost = LMSRCurrentPrice(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
+            cost = LMSRCost(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
         elif side == 0:
-            cost = LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo + quantity) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
+            cost = LMSRCost(self.b, self.outstandingYes, self.outstandingNo + quantity) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
         if user.points >= cost:
             user.points -= cost
             self.AMM.points += cost
@@ -42,7 +42,7 @@ class Markets:
             if user.yesPos < quantity:
                 return ValueError
             else:
-                cost = LMSRCurrentPrice(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
+                cost = LMSRCost(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
                 user.points += cost
                 user.yesPos -= quantity
                 self.outstandingYes -= quantity
@@ -53,7 +53,7 @@ class Markets:
             if user.noPos < quantity:
                 return ValueError
             else: 
-                cost = LMSRCurrentPrice(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCurrentPrice(self.b, self.outstandingYes, self.outstandingNo)
+                cost = LMSRCost(self.b, self.outstandingYes + quantity, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
                 user.points += cost
                 user.noPos -= quantity
                 self.outstandingNo -= quantity
@@ -84,3 +84,15 @@ def LMSRCurrentPrice(b: float, yesQuantity: int, noQuantity: int) -> float:
     expNo = math.exp(y - m)
 
     return expYes / (expYes + expNo)
+
+def LMSRCost(b: float, yesQuantity: int, noQuantity: int) -> float:
+    
+    # for stability, rather than directly using math.exp()
+    x = yesQuantity / b
+    y = noQuantity / b
+    m = max(x,y) 
+
+    expYes = math.exp(x - m)
+    expNo = math.exp(y - m)
+
+    return b * (m + math.log(expYes + expNo))
