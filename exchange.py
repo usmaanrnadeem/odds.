@@ -1,12 +1,12 @@
 import math
 
 class User:
-    def __init__(self, userID: int, username: str, points: float=0, yesPos: int=0, noPos: int=0):
+    def __init__(self, userID: int, username: str, yesPositions: dict[str, int], noPositions: dict[str, int], points: float=0):
         self.userID = userID
         self.username = username
         self.points = points
-        self.yesPos = yesPos
-        self.noPos = noPos
+        self.yesPositions = yesPositions
+        self.noPos = noPositions
 
 class Markets:
     def __init__(self, marketID: int, b: int, outstandingYes: int=0, outstandingNo: int=0):
