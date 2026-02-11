@@ -1,12 +1,12 @@
 import math
 
 class User:
-    def __init__(self, userID: int, username: str, yesPositions: dict[str, int], noPositions: dict[str, int], points: float=0):
+    def __init__(self, userID: int, username: str, yesPositions: dict[str, int]={}, noPositions: dict[str, int]={}, points: float=0):
         self.userID = userID
         self.username = username
         self.points = points
         self.yesPositions = yesPositions
-        self.noPos = noPositions
+        self.noPositions = noPositions
 
 class Markets:
     def __init__(self, marketID: int, b: int, outstandingYes: int=0, outstandingNo: int=0):
@@ -22,37 +22,52 @@ class Markets:
         elif side == 0:
             cost = LMSRCost(self.b, self.outstandingYes, self.outstandingNo + quantity) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo)
         if user.points >= cost:
-            user.points -= cost
-            self.AMM.points += cost
             if side == 1:
-                user.yesPos += quantity
-                self.outstandingYes += quantity
-
+                if self.marketID in user.yesPositions:
+                    user.points -= cost
+                    self.AMM.points += cost
+                    user.yesPositions[self.marketID] += quantity
+                    self.outstandingYes += quantity
+                else:
+                    user.yesPositions[self.marketID] = 0
+                    user.points -= cost
+                    self.AMM.points += cost
+                    user.yesPositions[self.marketID] += quantity
+                    self.outstandingYes += quantity
             elif side == 0:
-                user.noPos += quantity
-                self.outstandingNo += quantity
+                if self.marketID in user.noPositions:
+                    user.points -= cost
+                    self.AMM.points += cost
+                    user.noPositions[self.marketID] += quantity
+                    self.outstandingNo += quantity
+                else: 
+                    user.noPositions[self.marketID] = 0
+                    user.points -= cost
+                    self.AMM.points += cost
+                    user.noPositions[self.marketID] += quantity
+                    self.outstandingNo += quantity
             return
         else:
             return ValueError
     
     def sell(self, user: User, quantity: int, side: bool):
         if side == 1: 
-            if user.yesPos < quantity:
+            if user.yesPositions.get(self.marketID,0) < quantity:
                 return ValueError
             else:
                 cost = LMSRCost(self.b, self.outstandingYes, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes - quantity, self.outstandingNo)
                 user.points += cost
-                user.yesPos -= quantity
+                user.yesPositions[self.marketID] -= quantity
                 self.outstandingYes -= quantity
                 self.AMM.points -= cost
 
         if side == 0:
-            if user.noPos < quantity:
+            if user.noPositions.get(self.marketID,0) < quantity:
                 return ValueError
             else: 
                 cost = LMSRCost(self.b, self.outstandingYes, self.outstandingNo) - LMSRCost(self.b, self.outstandingYes, self.outstandingNo - quantity)
                 user.points += cost
-                user.noPos -= quantity
+                user.noPositions[self.marketID] -= quantity
                 self.outstandingNo -= quantity
                 self.AMM.points -= cost
 
