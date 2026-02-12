@@ -71,6 +71,22 @@ class Markets:
                 self.outstandingNo -= quantity
                 self.AMM.points -= cost
 
+    def settlement(self, user: User,side: bool):
+        if side == 1:
+            if self.marketID in user.yesPositions:
+                user.points += user.yesPositions[self.marketID]
+                del user.yesPositions[self.marketID]
+            user.noPositions.pop(self.marketID, None)
+            self.outstandingYes = 0
+            self.outstandingNo = 0
+        if side == 0:
+            if self.marketID in user.noPositions:
+                user.points += user.noPositions[self.marketID]
+                del user.noPositions[self.marketID]
+            user.yesPositions.pop(self.marketID)
+            self.outstandingYes = 0
+            self.outstandingNo = 0
+
 class AMM:
     def __init__(self, marketID: int, username: str, points: float=10000, yesPos: int=0, noPos: int=0):
         self.marketID = marketID
