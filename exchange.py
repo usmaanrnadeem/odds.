@@ -1,7 +1,14 @@
 import math
 
+class IterRegistry(type):
+    def __iter__(cls):
+        return iter(cls._registry)
+
 class User:
+    __metaclass__ = IterRegistry
+    _registry = []    
     def __init__(self, userID: int, username: str, yesPositions: dict[str, int]={}, noPositions: dict[str, int]={}, points: float=0):
+        self._registry.append(self)
         self.userID = userID
         self.username = username
         self.points = points
