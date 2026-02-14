@@ -74,19 +74,21 @@ class Markets:
                 self.outstandingNo -= quantity
                 self.AMM.points -= cost
 
-    def settlement(self, user: User,side: bool):
+    def settlement(self, side: bool):
         if side == 1:
-            if self.marketID in user.yesPositions:
-                user.points += user.yesPositions[self.marketID]
-                del user.yesPositions[self.marketID]
-            user.noPositions.pop(self.marketID, None)
+            for user in users:
+                if self.marketID in user.yesPositions:
+                    user.points += user.yesPositions[self.marketID]
+                    del user.yesPositions[self.marketID]
+                user.noPositions.pop(self.marketID, None)
             self.outstandingYes = 0
             self.outstandingNo = 0
         if side == 0:
-            if self.marketID in user.noPositions:
-                user.points += user.noPositions[self.marketID]
-                del user.noPositions[self.marketID]
-            user.yesPositions.pop(self.marketID)
+            for user in users:
+                if self.marketID in user.noPositions:
+                    user.points += user.noPositions[self.marketID]
+                    del user.noPositions[self.marketID]
+                user.yesPositions.pop(self.marketID)
             self.outstandingYes = 0
             self.outstandingNo = 0
 
@@ -124,3 +126,21 @@ def LMSRCost(b: float, yesQuantity: int, noQuantity: int) -> float:
     expNo = math.exp(y - m)
 
     return b * (m + math.log(expYes + expNo))
+
+
+usmaan = User(1,'uz',{},{},100)
+
+usmaan2 = User(1,'uz2',{},{},100)
+
+election = Markets(1,20)
+
+election.buy(usmaan,10,1)
+election.buy(usmaan2,10,1)
+
+print(usmaan.points)
+print(usmaan2.points)
+
+election.settlement(0)
+
+print(usmaan.points)
+print(usmaan2.points)
