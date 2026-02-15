@@ -35,13 +35,13 @@ class Markets:
                 self.outstandingNo += quantity
             return
         else:
-            return ValueError
+            raise ValueError
     
     def sell(self, user: User, quantity: int, side: bool):
         cost = LMSRCostSell(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
         if side == 1: 
             if user.yesPositions.get(self.marketID,0) < quantity:
-                return ValueError
+                raise ValueError
             else:
                 user.points += cost
                 user.yesPositions[self.marketID] -= quantity
@@ -49,7 +49,7 @@ class Markets:
 
         if side == 0:
             if user.noPositions.get(self.marketID,0) < quantity:
-                return ValueError
+                raise ValueError
             else: 
                 user.points += cost
                 user.noPositions[self.marketID] -= quantity
@@ -69,7 +69,7 @@ class Markets:
                 if self.marketID in user.noPositions:
                     user.points += user.noPositions[self.marketID]
                     del user.noPositions[self.marketID]
-                user.yesPositions.pop(self.marketID)
+                user.yesPositions.pop(self.marketID, None)
             self.outstandingYes = 0
             self.outstandingNo = 0
 
