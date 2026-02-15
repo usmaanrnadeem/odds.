@@ -92,12 +92,6 @@ class Markets:
             self.outstandingYes = 0
             self.outstandingNo = 0
 
-class AMM:
-    def __init__(self, marketID: int, username: str, points: float=10000, yesPos: int=0, noPos: int=0):
-        self.marketID = marketID
-        self.username = username
-        self.points = points
-
 class ClearingHouse:
     def __init__(self, points: dict, username: str="Clearing House",):
         self.points = points
