@@ -92,11 +92,6 @@ class Markets:
             self.outstandingYes = 0
             self.outstandingNo = 0
 
-class ClearingHouse:
-    def __init__(self, points: dict, username: str="Clearing House",):
-        self.points = points
-        self.username = username
-
 def LMSRCurrentPrice(b: float, yesQuantity: int, noQuantity: int) -> float:
 
     # for stability, rather than directly using math.exp()
