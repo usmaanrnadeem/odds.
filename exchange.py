@@ -3,13 +3,13 @@ import math
 users = []
 
 class User:
-    def __init__(self, userID: int, username: str, yesPositions: dict[str, int]={}, noPositions: dict[str, int]={}, points: float=0):
+    def __init__(self, userID: int, username: str, yesPositions: dict[str, int] | None = None, noPositions: dict[str, int] | None = None, points: float=0):
         users.append(self)
         self.userID = userID
         self.username = username
         self.points = points
-        self.yesPositions = yesPositions
-        self.noPositions = noPositions
+        self.yesPositions = {} if yesPositions is None else yesPositions
+        self.noPositions = {} if noPositions is None else noPositions
 
 class Markets:
     def __init__(self, marketID: int, b: int, outstandingYes: int=0, outstandingNo: int=0):
