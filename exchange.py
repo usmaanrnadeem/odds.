@@ -1,4 +1,7 @@
 import math
+import sqlite3
+
+con = sqlite3.connect("exchange.db")
 
 users = []
 
