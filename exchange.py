@@ -3,6 +3,8 @@ import sqlite3
 
 con = sqlite3.connect("exchange.db")
 
+cur = con.cursor()
+
 users = []
 
 class User:
@@ -138,3 +140,8 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
         newExpNo = math.exp(newY - newM)
 
     return b * ((m + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
+
+class Positions:
+    def __innit__(self):
+        # here we will have keys that are userID and marketID and the values of yesPos and noPos i.e. a row for each user and market combo to store positions
+        self.positions = {}
