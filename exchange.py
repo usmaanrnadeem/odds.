@@ -141,7 +141,21 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
 
     return b * ((m + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
 
-class Positions:
-    def __innit__(self):
-        # here we will have keys that are userID and marketID and the values of yesPos and noPos i.e. a row for each user and market combo to store positions
-        self.positions = {}
+class Position:
+    def __init__(self, userID: int, marketID: int, yesPos: int, noPos: int):
+        self.userID = userID
+        self.marketID = marketID
+        self.yesPos = yesPos
+        self.noPos = noPos
+
+class PositionStore:
+    def __init__(self):
+        self.rows = {}
+
+    def get(self, userId, marketID):
+        key = (userId, marketID)
+        if key not in self.rows:
+            self.rows[key] = Position(userId, marketID, 0, 0)
+        return self.rows[key]
+    
+# This Position/PositionStore refactor aims to replace yesPositions and noPositions in the User class - rather than using dictionaries in the User class
