@@ -25,12 +25,20 @@ class Markets:
         cost = LMSRCostBuy(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
         if user.points >= cost:
             if side == 1:
+                # replace this with the following psuedo / real code
+                # user.points -= cost 
+                # Ledger.get(userID,marketID).addPos(quantity, yes)
+                # self.outstandingYes += quantity
                 if self.marketID not in user.yesPositions:
                     user.yesPositions[self.marketID] = 0
                 user.points -= cost
                 user.yesPositions[self.marketID] += quantity
                 self.outstandingYes += quantity
             elif side == 0:
+                # replace this with the following psuedo / real code
+                # user.points -= cost 
+                # Ledger.get(userID,marketID).addPos(quantity, no)
+                # self.outstandingNo += quantity
                 if self.marketID not in user.noPositions:
                     user.noPositions[self.marketID] = 0
                 user.points -= cost
@@ -155,5 +163,9 @@ class PositionStore:
         if key not in self.rows:
             self.rows[key] = Position(userId, marketID, 0, 0)
         return self.rows[key]
+    
+    # function to add positions: def addPos()
+
+    # function to remove positions: def removePos()
     
 # This Position/PositionStore refactor aims to replace yesPositions and noPositions in the User class - rather than using dictionaries in the User class
