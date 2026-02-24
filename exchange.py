@@ -158,14 +158,28 @@ class PositionStore:
     def __init__(self):
         self.rows = {}
 
-    def get(self, userId, marketID):
+    def get(self, userId: int, marketID: int):
         key = (userId, marketID)
         if key not in self.rows:
             self.rows[key] = Position(userId, marketID, 0, 0)
         return self.rows[key]
     
-    # function to add positions: def addPos()
+    def addPos(self, positionRow: Position, quantity: int, side: bool):
+        if side == 1:
+            positionRow.yesPos += quantity
+        elif side == 0:
+            positionRow.noPos += quantity
 
-    # function to remove positions: def removePos()
+    def removePos(self, positionRow: Position, quantity: int, side: bool):
+        if side == 1:
+            if quantity > positionRow.yesPos:
+                raise ValueError("Insufficient yes positions to sell")
+            else:
+                positionRow.yesPos -= quantity
+        elif side == 0:
+            if quantity > positionRow.noPos:
+                raise ValueError("Insufficient no positions to sell")
+            else:
+                positionRow.noPos -= quantity
     
 # This Position/PositionStore refactor aims to replace yesPositions and noPositions in the User class - rather than using dictionaries in the User class
