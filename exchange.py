@@ -7,6 +7,41 @@ cur = con.cursor()
 
 users = []
 
+class Position:
+    def __init__(self, userID: int, marketID: int, yesPos: int, noPos: int):
+        self.userID = userID
+        self.marketID = marketID
+        self.yesPos = yesPos
+        self.noPos = noPos
+
+class PositionStore:
+    def __init__(self):
+        self.rows = {}
+
+    def get(self, userId: int, marketID: int):
+        key = (userId, marketID)
+        if key not in self.rows:
+            self.rows[key] = Position(userId, marketID, 0, 0)
+        return self.rows[key]
+    
+    def addPos(self, positionRow: Position, quantity: int, side: bool):
+        if side == 1:
+            positionRow.yesPos += quantity
+        elif side == 0:
+            positionRow.noPos += quantity
+
+    def removePos(self, positionRow: Position, quantity: int, side: bool):
+        if side == 1:
+            if quantity > positionRow.yesPos:
+                raise ValueError("Insufficient yes positions to sell")
+            else:
+                positionRow.yesPos -= quantity
+        elif side == 0:
+            if quantity > positionRow.noPos:
+                raise ValueError("Insufficient no positions to sell")
+            else:
+                positionRow.noPos -= quantity
+
 class User:
     def __init__(self, userID: int, username: str, points: float=0):
         users.append(self)
@@ -21,28 +56,16 @@ class Markets:
         self.outstandingYes = outstandingYes
         self.outstandingNo = outstandingNo
         
-    def buy(self, user: User, quantity: int ,side: bool):
+    def buy(self, user: User, quantity: int ,side: bool, ledger: PositionStore):
         cost = LMSRCostBuy(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
         if user.points >= cost:
             if side == 1:
-                # replace this with the following psuedo / real code
-                # user.points -= cost 
-                # Ledger.get(userID,marketID).addPos(quantity, yes)
-                # self.outstandingYes += quantity
-                if self.marketID not in user.yesPositions:
-                    user.yesPositions[self.marketID] = 0
-                user.points -= cost
-                user.yesPositions[self.marketID] += quantity
+                user.points -= cost 
+                ledger.get(user.userID,self.marketID).addPos(quantity, 1)
                 self.outstandingYes += quantity
             elif side == 0:
-                # replace this with the following psuedo / real code
-                # user.points -= cost 
-                # Ledger.get(userID,marketID).addPos(quantity, no)
-                # self.outstandingNo += quantity
-                if self.marketID not in user.noPositions:
-                    user.noPositions[self.marketID] = 0
-                user.points -= cost
-                user.noPositions[self.marketID] += quantity
+                user.points -= cost 
+                ledger.get(user.userID,self.marketID).addPos(quantity, 0)
                 self.outstandingNo += quantity
             return
         else:
@@ -147,39 +170,6 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
 
     return b * ((m + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
 
-class Position:
-    def __init__(self, userID: int, marketID: int, yesPos: int, noPos: int):
-        self.userID = userID
-        self.marketID = marketID
-        self.yesPos = yesPos
-        self.noPos = noPos
-
-class PositionStore:
-    def __init__(self):
-        self.rows = {}
-
-    def get(self, userId: int, marketID: int):
-        key = (userId, marketID)
-        if key not in self.rows:
-            self.rows[key] = Position(userId, marketID, 0, 0)
-        return self.rows[key]
-    
-    def addPos(self, positionRow: Position, quantity: int, side: bool):
-        if side == 1:
-            positionRow.yesPos += quantity
-        elif side == 0:
-            positionRow.noPos += quantity
-
-    def removePos(self, positionRow: Position, quantity: int, side: bool):
-        if side == 1:
-            if quantity > positionRow.yesPos:
-                raise ValueError("Insufficient yes positions to sell")
-            else:
-                positionRow.yesPos -= quantity
-        elif side == 0:
-            if quantity > positionRow.noPos:
-                raise ValueError("Insufficient no positions to sell")
-            else:
-                positionRow.noPos -= quantity
+Ledger = PositionStore()
     
 # This Position/PositionStore refactor aims to replace yesPositions and noPositions in the User class - rather than using dictionaries in the User class
