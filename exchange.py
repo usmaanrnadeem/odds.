@@ -61,32 +61,32 @@ class Markets:
         if user.points >= cost:
             if side == 1:
                 user.points -= cost 
-                ledger.get(user.userID,self.marketID).addPos(quantity, 1)
+                ledger.get(user.userID,self.marketID).addPos(quantity, side)
                 self.outstandingYes += quantity
             elif side == 0:
                 user.points -= cost 
-                ledger.get(user.userID,self.marketID).addPos(quantity, 0)
+                ledger.get(user.userID,self.marketID).addPos(quantity, side)
                 self.outstandingNo += quantity
             return
         else:
             raise ValueError
     
-    def sell(self, user: User, quantity: int, side: bool):
+    def sell(self, user: User, quantity: int, side: bool, ledger: PositionStore):
         cost = LMSRCostSell(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
         if side == 1: 
-            if user.yesPositions.get(self.marketID,0) < quantity:
+            if ledger.get(user.userID, self.marketID).yesPos < quantity:
                 raise ValueError
             else:
                 user.points += cost
-                user.yesPositions[self.marketID] -= quantity
+                ledger.get(user.userID, self.marketID).removePos(quantity, side)
                 self.outstandingYes -= quantity
 
         if side == 0:
-            if user.noPositions.get(self.marketID,0) < quantity:
+            if ledger.get(user.userID, self.marketID).noPos < quantity:
                 raise ValueError
             else: 
                 user.points += cost
-                user.noPositions[self.marketID] -= quantity
+                ledger.get(user.userID, self.marketID).removePos(quantity, side)
                 self.outstandingNo -= quantity
 
     def settlement(self, side: bool):
