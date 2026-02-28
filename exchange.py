@@ -61,11 +61,11 @@ class Markets:
         if user.points >= cost:
             if side == 1:
                 user.points -= cost 
-                ledger.get(user.userID,self.marketID).addPos(quantity, side)
+                ledger.addPos(ledger.get(user.userID,self.marketID), quantity, side)
                 self.outstandingYes += quantity
             elif side == 0:
                 user.points -= cost 
-                ledger.get(user.userID,self.marketID).addPos(quantity, side)
+                ledger.addPos(ledger.get(user.userID,self.marketID), quantity, side)
                 self.outstandingNo += quantity
             return
         else:
@@ -78,7 +78,7 @@ class Markets:
                 raise ValueError
             else:
                 user.points += cost
-                ledger.get(user.userID, self.marketID).removePos(quantity, side)
+                ledger.removePos(ledger.get(user.userID, self.marketID), quantity, side)
                 self.outstandingYes -= quantity
 
         if side == 0:
@@ -86,7 +86,7 @@ class Markets:
                 raise ValueError
             else: 
                 user.points += cost
-                ledger.get(user.userID, self.marketID).removePos(quantity, side)
+                ledger.removePos(ledger.get(user.userID, self.marketID), quantity, side)
                 self.outstandingNo -= quantity
 
     def settlement(self, side: bool):
