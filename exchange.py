@@ -18,17 +18,17 @@ class PositionStore:
     def __init__(self):
         self.rows = {}
 
+    def contains(self, key: tuple):
+        if key not in self.rows:
+            return False
+        else: 
+            return True
+    
     def get(self, userId: int, marketID: int):
         key = (userId, marketID)
         if key not in self.rows:
             self.rows[key] = Position(userId, marketID, 0, 0)
         return self.rows[key]
-    
-    def __contains__(self, key: tuple):
-        if key not in self.rows:
-            return False
-        else: 
-            return True
     
     def addPos(self, positionRow: Position, quantity: int, side: bool):
         if side == 1:
@@ -95,21 +95,21 @@ class Markets:
                 ledger.removePos(ledger.get(user.userID, self.marketID), quantity, side)
                 self.outstandingNo -= quantity
 
-    def settlement(self, side: bool):
+    def settlement(self, side: bool, ledger: PositionStore):
         if side == 1:
             for user in users:
-                if self.marketID in user.yesPositions:
-                    user.points += user.yesPositions[self.marketID]
-                    del user.yesPositions[self.marketID]
-                user.noPositions.pop(self.marketID, None)
+                positions = ledger.get(user.userID, self.marketID)
+                user.points += positions.yesPos
+                ledger.removePos(positions, positions.yesPos, side)
+                ledger.removePos(positions, positions.noPos, 0)
             self.outstandingYes = 0
             self.outstandingNo = 0
         if side == 0:
             for user in users:
-                if self.marketID in user.noPositions:
-                    user.points += user.noPositions[self.marketID]
-                    del user.noPositions[self.marketID]
-                user.yesPositions.pop(self.marketID, None)
+                positions = ledger.get(user.userID, self.marketID)
+                user.points += positions.noPos
+                ledger.removePos(positions, positions.noPos, side)
+                ledger.removePos(positions, positions.yesPos, 1)
             self.outstandingYes = 0
             self.outstandingNo = 0
 
