@@ -24,6 +24,12 @@ class PositionStore:
             self.rows[key] = Position(userId, marketID, 0, 0)
         return self.rows[key]
     
+    def __contains__(self, key: tuple):
+        if key not in self.rows:
+            return False
+        else: 
+            return True
+    
     def addPos(self, positionRow: Position, quantity: int, side: bool):
         if side == 1:
             positionRow.yesPos += quantity
