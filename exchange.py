@@ -96,22 +96,19 @@ class Markets:
                 self.outstandingNo -= quantity
 
     def settlement(self, side: bool, ledger: PositionStore):
-        if side == 1:
-            for user in users:
-                positions = ledger.get(user.userID, self.marketID)
+        for user in users:
+            positions = ledger.get(user.userID, self.marketID)
+
+            if side == 1:
                 user.points += positions.yesPos
-                ledger.removePos(positions, positions.yesPos, side)
-                ledger.removePos(positions, positions.noPos, 0)
-            self.outstandingYes = 0
-            self.outstandingNo = 0
-        if side == 0:
-            for user in users:
-                positions = ledger.get(user.userID, self.marketID)
+            else:
                 user.points += positions.noPos
-                ledger.removePos(positions, positions.noPos, side)
-                ledger.removePos(positions, positions.yesPos, 1)
-            self.outstandingYes = 0
-            self.outstandingNo = 0
+
+            positions.yesPos = 0
+            positions.noPos = 0
+
+        self.outstandingYes = 0
+        self.outstandingNo = 0
 
 def LMSRCurrentPrice(b: float, yesQuantity: int, noQuantity: int) -> float:
     
