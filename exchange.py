@@ -49,7 +49,7 @@ class PositionStore:
                 positionRow.noPos -= quantity
 
 class User:
-    def __init__(self, userID: int, username: str, points: float=0):
+    def __init__(self, username: str, points: float=0):
         users.append(self) # can be removed once system refactored for local db
         self.username = username
         self.points = points
@@ -61,12 +61,17 @@ class User:
         self.userID = cur.lastrowid
 
 class Markets:
-    def __init__(self, marketID: int, b: int, outstandingYes: int=0, outstandingNo: int=0):
-        self.marketID = marketID
+    def __init__(self, b: int, outstandingYes: int=0, outstandingNo: int=0):
         self.b = b
         self.outstandingYes = outstandingYes
         self.outstandingNo = outstandingNo
-        
+        cur.execute(
+            "INSERT INTO markets (b, outstandingYes, outstandingNo) VALUES (?,?,?)",
+            (self.b, self.outstandingYes, self.outstandingNo)
+        )
+        con.commit()
+        self.marketID = cur.lastrowid
+
     def buy(self, user: User, quantity: int ,side: bool, ledger: PositionStore):
         cost = LMSRCostBuy(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
         if user.points >= cost:
