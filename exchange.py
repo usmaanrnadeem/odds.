@@ -97,15 +97,17 @@ class Markets:
 
     def settlement(self, side: bool, ledger: PositionStore):
         for user in users:
-            positions = ledger.get(user.userID, self.marketID)
+            if ledger.contains((user.userID, self.marketID)):
+                
+                positions = ledger.get(user.userID, self.marketID)
 
-            if side == 1:
-                user.points += positions.yesPos
-            else:
-                user.points += positions.noPos
+                if side == 1:
+                    user.points += positions.yesPos
+                else:
+                    user.points += positions.noPos
 
-            positions.yesPos = 0
-            positions.noPos = 0
+                positions.yesPos = 0
+                positions.noPos = 0
 
         self.outstandingYes = 0
         self.outstandingNo = 0
