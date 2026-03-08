@@ -50,10 +50,15 @@ class PositionStore:
 
 class User:
     def __init__(self, userID: int, username: str, points: float=0):
-        users.append(self)
-        self.userID = userID
+        users.append(self) # can be removed once system refactored for local db
         self.username = username
         self.points = points
+        cur.execute(
+            "INSERT INTO users (username, points) VALUES (?,?)",
+            (self.username,self.points)
+        )
+        con.commit()
+        self.userID = cur.lastrowid
 
 class Markets:
     def __init__(self, marketID: int, b: int, outstandingYes: int=0, outstandingNo: int=0):
@@ -148,7 +153,7 @@ def LMSRCostBuy (b: float, yesQuantity: int, noQuantity: int, purchaseQuantity: 
         newExpYes = math.exp(x - newM)
         newExpNo = math.exp(newY - newM)
 
-    return b * ((m + math.log(expYes + expNo)) - (m + math.log(newExpYes + newExpNo)))
+    return b * ((newM + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
 
 def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int, side: bool) -> float:
 
@@ -173,8 +178,6 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
         newExpYes = math.exp(x - newM)
         newExpNo = math.exp(newY - newM)
 
-    return b * ((m + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
+    return b * ((newM + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
 
 Ledger = PositionStore()
-    
-# This Position/PositionStore refactor aims to replace yesPositions and noPositions in the User class - rather than using dictionaries in the User class
