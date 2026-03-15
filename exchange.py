@@ -3,6 +3,8 @@ import sqlite3
 
 con = sqlite3.connect("exchange.db")
 
+con.row_factory = sqlite3.Row
+
 cur = con.cursor()
 
 users = []
@@ -86,6 +88,46 @@ class Markets:
             return
         else:
             raise ValueError
+
+    def buyRewrite(self, userID: int, quantity: int, side: bool):
+        cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = ?",
+                    (self.marketID, )
+        )
+
+        marketValues  = cur.fetchone()
+        
+        cost = LMSRCostBuy(marketValues[0], marketValues[1], marketValues[2], quantity, side)
+        
+        cur.execute("SELECT * FROM users WHERE userID = ?",
+                    (userID,)            
+        )
+        userRow = cur.fetchone()
+        if userRow["points"] >= cost:
+            if side == 1: 
+                cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
+                            (cost, userID)
+                )
+                cur.execute("UPDATE positions SET yesPos = yesPos + ? WHERE userID = ? AND marketID = ?",
+                            (quantity, userID, self.marketID)
+                )
+                cur.execute("UPDATE markets SET outstandingYes = outstandingYes + ? WHERE marketID = ?",
+                            (quantity, self.marketID)
+                )
+            elif side == 0: 
+                cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
+                            (cost, userID)
+                )
+                cur.execute("UPDATE positions SET noPos = noPos + ? WHERE userID = ? AND marketID = ?",
+                            (quantity, userID, self.marketID)
+                )
+                cur.execute("UPDATE markets SET outstandingNo = outstandingNo + ? WHERE marketID = ?",
+                            (quantity, self.marketID)
+                )
+            return
+        else:
+            return ValueError
+
+
     
     def sell(self, user: User, quantity: int, side: bool, ledger: PositionStore):
         cost = LMSRCostSell(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
