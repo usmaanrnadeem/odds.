@@ -96,8 +96,8 @@ class Markets:
 
         marketValues  = cur.fetchone()
         
-        cost = LMSRCostBuy(marketValues[0], marketValues[1], marketValues[2], quantity, side)
-        
+        cost = LMSRCostBuy(marketValues["b"], marketValues["outstandingYes"], marketValues["outstandingNo"], quantity, side)
+
         cur.execute("SELECT * FROM users WHERE userID = ?",
                     (userID,)            
         )
@@ -107,9 +107,23 @@ class Markets:
                 cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
                             (cost, userID)
                 )
-                cur.execute("UPDATE positions SET yesPos = yesPos + ? WHERE userID = ? AND marketID = ?",
-                            (quantity, userID, self.marketID)
+
+                cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
+                            (userID, self.marketID)
                 )
+                
+                pos = cur.fetchone()
+
+                if pos:
+                    cur.execute("UPDATE positions SET yesPos = yesPos + ? WHERE userID = ? AND marketID = ?",
+                                (quantity, userID, self.marketID)
+                )
+                    
+                else:
+                    cur.execute("INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES (?,?,?,?)",
+                                (userID, self.marketID, quantity, 0)
+                    )
+                    
                 cur.execute("UPDATE markets SET outstandingYes = outstandingYes + ? WHERE marketID = ?",
                             (quantity, self.marketID)
                 )
@@ -117,9 +131,22 @@ class Markets:
                 cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
                             (cost, userID)
                 )
-                cur.execute("UPDATE positions SET noPos = noPos + ? WHERE userID = ? AND marketID = ?",
-                            (quantity, userID, self.marketID)
+                cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
+                            (userID, self.marketID)
                 )
+                
+                pos = cur.fetchone()
+
+                if pos:
+                    cur.execute("UPDATE positions SET noPos = noPos + ? WHERE userID = ? AND marketID = ?",
+                                (quantity, userID, self.marketID)
+                )
+                    
+                else:
+                    cur.execute("INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES (?,?,?,?)",
+                                (userID, self.marketID, 0, quantity)
+                    )
+                
                 cur.execute("UPDATE markets SET outstandingNo = outstandingNo + ? WHERE marketID = ?",
                             (quantity, self.marketID)
                 )
