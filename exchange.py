@@ -233,7 +233,7 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
 
     x = yesQuantity / b
     y = noQuantity / b
-    m = max(x,y) 
+    m = max(x,y)
 
     expYes = math.exp(x - m)
     expNo = math.exp(y - m)
@@ -244,7 +244,7 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
 
         newExpYes = math.exp(newX - newM)
         newExpNo = math.exp(y - newM)
-    
+
     elif side == 0:
         newY = (noQuantity - saleQuantity) / b
         newM = max(x,newY)
@@ -252,4 +252,4 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
         newExpYes = math.exp(x - newM)
         newExpNo = math.exp(newY - newM)
 
-    return b * ((newM + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
+    return b * ((m + math.log(expYes + expNo)) - (newM + math.log(newExpYes + newExpNo)))
