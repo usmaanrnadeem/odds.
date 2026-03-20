@@ -140,7 +140,7 @@ async def register(body: RegisterRequest, response: Response):
         )
 
     token = create_token(user["userid"], user["is_admin"])
-    response.set_cookie("access_token", token, httponly=True, samesite="lax", max_age=86400)
+    response.set_cookie("access_token", token, httponly=True, samesite="none", secure=True, max_age=86400)
 
     return UserOut(
         user_id=user["userid"],
@@ -159,7 +159,7 @@ async def login(body: LoginRequest, response: Response):
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     token = create_token(user["userid"], user["is_admin"])
-    response.set_cookie("access_token", token, httponly=True, samesite="lax", max_age=86400)
+    response.set_cookie("access_token", token, httponly=True, samesite="none", secure=True, max_age=86400)
 
     return UserOut(
         user_id=user["userid"],
@@ -172,7 +172,7 @@ async def login(body: LoginRequest, response: Response):
 
 @app.post("/auth/logout")
 async def logout(response: Response):
-    response.delete_cookie("access_token")
+    response.delete_cookie("access_token", samesite="none", secure=True)
     return {"ok": True}
 
 
