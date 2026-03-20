@@ -44,16 +44,17 @@ class Markets:
         )
         userRow = cur.fetchone()
         if userRow["points"] >= cost:
-            if side == 1: 
-                cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
-                            (cost, userID)
-                )
+            cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
+                        (cost, userID)
+            )
 
-                cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
-                            (userID, self.marketID)
-                )
-                
-                pos = cur.fetchone()
+            cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
+                        (userID, self.marketID)
+            )
+            
+            pos = cur.fetchone()
+
+            if side == 1: 
 
                 if pos:
                     cur.execute("UPDATE positions SET yesPos = yesPos + ? WHERE userID = ? AND marketID = ?",
@@ -69,14 +70,6 @@ class Markets:
                             (quantity, self.marketID)
                 )
             elif side == 0: 
-                cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
-                            (cost, userID)
-                )
-                cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
-                            (userID, self.marketID)
-                )
-                
-                pos = cur.fetchone()
 
                 if pos:
                     cur.execute("UPDATE positions SET noPos = noPos + ? WHERE userID = ? AND marketID = ?",
@@ -113,9 +106,11 @@ class Markets:
                 
         pos = cur.fetchone()
         
-        if side == 1:
+        if pos:
 
-            if pos: 
+            if side == 1:
+
+               
 
                 if pos["yesPos"] < quantity:
                     raise ValueError
@@ -131,15 +126,10 @@ class Markets:
                     cur.execute("UPDATE markets SET outstandingYes = outstandingYes - ? WHERE marketID = ?",
                                 (quantity, self.marketID))
             
-            else:
-                raise ValueError
-            
-            con.commit()
-            return
+                con.commit()
+                return
 
-        elif side == 0:
-
-            if pos:
+            elif side == 0:
 
                 if pos["noPos"] < quantity:
                     raise ValueError
@@ -154,13 +144,13 @@ class Markets:
                     
                     cur.execute("UPDATE markets SET outstandingNo = outstandingNo - ? WHERE marketID = ?",
                                 (quantity, self.marketID))
+                
+                con.commit()
+                return
             
-            else:
-                raise ValueError
-            
-            con.commit()
-            return
-
+        else:
+            raise ValueError
+                
     def settlement(self, side: bool):
 
         if side == 1:
