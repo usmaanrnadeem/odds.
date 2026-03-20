@@ -7,52 +7,8 @@ con.row_factory = sqlite3.Row
 
 cur = con.cursor()
 
-users = []
-
-class Position:
-    def __init__(self, userID: int, marketID: int, yesPos: int, noPos: int):
-        self.userID = userID
-        self.marketID = marketID
-        self.yesPos = yesPos
-        self.noPos = noPos
-
-class PositionStore:
-    def __init__(self):
-        self.rows = {}
-
-    def contains(self, key: tuple):
-        if key not in self.rows:
-            return False
-        else: 
-            return True
-    
-    def get(self, userId: int, marketID: int):
-        key = (userId, marketID)
-        if key not in self.rows:
-            self.rows[key] = Position(userId, marketID, 0, 0)
-        return self.rows[key]
-    
-    def addPos(self, positionRow: Position, quantity: int, side: bool):
-        if side == 1:
-            positionRow.yesPos += quantity
-        elif side == 0:
-            positionRow.noPos += quantity
-
-    def removePos(self, positionRow: Position, quantity: int, side: bool):
-        if side == 1:
-            if quantity > positionRow.yesPos:
-                raise ValueError("Insufficient yes positions to sell")
-            else:
-                positionRow.yesPos -= quantity
-        elif side == 0:
-            if quantity > positionRow.noPos:
-                raise ValueError("Insufficient no positions to sell")
-            else:
-                positionRow.noPos -= quantity
-
 class User:
     def __init__(self, username: str, points: float=0):
-        users.append(self) # can be removed once system refactored for local db
         self.username = username
         self.points = points
         cur.execute(
@@ -74,22 +30,7 @@ class Markets:
         con.commit()
         self.marketID = cur.lastrowid
 
-    def buy(self, user: User, quantity: int ,side: bool, ledger: PositionStore):
-        cost = LMSRCostBuy(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
-        if user.points >= cost:
-            if side == 1:
-                user.points -= cost 
-                ledger.addPos(ledger.get(user.userID,self.marketID), quantity, side)
-                self.outstandingYes += quantity
-            elif side == 0:
-                user.points -= cost 
-                ledger.addPos(ledger.get(user.userID,self.marketID), quantity, side)
-                self.outstandingNo += quantity
-            return
-        else:
-            raise ValueError
-
-    def buyRewrite(self, userID: int, quantity: int, side: bool):
+    def buy(self, userID: int, quantity: int, side: bool):
         cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = ?",
                     (self.marketID, )
         )
@@ -153,29 +94,10 @@ class Markets:
             con.commit()
             return
         else:
-            return ValueError
+            raise ValueError
 
 
-    
-    def sell(self, user: User, quantity: int, side: bool, ledger: PositionStore):
-        cost = LMSRCostSell(self.b, self.outstandingYes, self.outstandingNo, quantity, side)
-        if side == 1: 
-            if ledger.get(user.userID, self.marketID).yesPos < quantity:
-                raise ValueError
-            else:
-                user.points += cost
-                ledger.removePos(ledger.get(user.userID, self.marketID), quantity, side)
-                self.outstandingYes -= quantity
-
-        if side == 0:
-            if ledger.get(user.userID, self.marketID).noPos < quantity:
-                raise ValueError
-            else: 
-                user.points += cost
-                ledger.removePos(ledger.get(user.userID, self.marketID), quantity, side)
-                self.outstandingNo -= quantity
-
-    def sellRewrite(self, userID: int, quantity: int, side: bool):
+    def sell(self, userID: int, quantity: int, side: bool):
 
         cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = ?",
                     (self.marketID, )
@@ -239,25 +161,7 @@ class Markets:
             con.commit()
             return
 
-
-    def settlement(self, side: bool, ledger: PositionStore):
-        for user in users:
-            if ledger.contains((user.userID, self.marketID)):
-                
-                positions = ledger.get(user.userID, self.marketID)
-
-                if side == 1:
-                    user.points += positions.yesPos
-                else:
-                    user.points += positions.noPos
-
-                positions.yesPos = 0
-                positions.noPos = 0
-
-        self.outstandingYes = 0
-        self.outstandingNo = 0
-
-    def settlementRewrite(self, side: bool):
+    def settlement(self, side: bool):
 
         if side == 1:
 
@@ -339,5 +243,3 @@ def LMSRCostSell (b: float, yesQuantity: int, noQuantity: int, saleQuantity: int
         newExpNo = math.exp(newY - newM)
 
     return b * ((newM + math.log(newExpYes + newExpNo)) - (m + math.log(expYes + expNo)))
-
-Ledger = PositionStore()
