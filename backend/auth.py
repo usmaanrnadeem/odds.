@@ -5,7 +5,7 @@ Tokens live in httpOnly cookies, 24h expiry.
 import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Cookie, HTTPException, status
+from fastapi import Cookie, Header, HTTPException, status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -46,8 +46,14 @@ def _decode_token(token: str) -> dict:
 
 # ── FastAPI dependencies ─────────────────────────────────────
 
-def get_current_user(token: str | None = Cookie(default=None, alias="access_token")) -> dict:
-    """Dependency — injects {user_id, is_admin} from the httpOnly cookie."""
+def get_current_user(
+    cookie_token: str | None = Cookie(default=None, alias="access_token"),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """Dependency — accepts token from httpOnly cookie or Authorization: Bearer header."""
+    token = cookie_token
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     payload = _decode_token(token)

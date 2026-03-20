@@ -29,6 +29,7 @@ class UserOut(BaseModel):
     points: float
     is_admin: bool
     token_key: str
+    access_token: Optional[str] = None
 
 
 # ── Markets ─────────────────────────────────────────────────

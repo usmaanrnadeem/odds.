@@ -148,6 +148,7 @@ async def register(body: RegisterRequest, response: Response):
         points=float(user["points"]),
         is_admin=user["is_admin"],
         token_key=user["token_key"],
+        access_token=token,
     )
 
 
@@ -167,6 +168,7 @@ async def login(body: LoginRequest, response: Response):
         points=float(user["points"]),
         is_admin=user["is_admin"],
         token_key=user["token_key"],
+        access_token=token,
     )
 
 

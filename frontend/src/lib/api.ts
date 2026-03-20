@@ -5,10 +5,22 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+const TOKEN_KEY = "access_token";
+export const tokenStore = {
+  get: () => (typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null),
+  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = tokenStore.get();
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
     ...init,
   });
   if (!res.ok) {
@@ -32,6 +44,7 @@ export type User = {
   points: number;
   is_admin: boolean;
   token_key: string;
+  access_token?: string;
 };
 
 export const api = {

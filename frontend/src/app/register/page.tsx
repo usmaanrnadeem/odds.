@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Token from "@/components/Token";
 import { TOKEN_KEYS, TOKEN_LABELS, TokenKey } from "@/lib/tokens";
@@ -23,7 +23,8 @@ export default function RegisterPage() {
     setError("");
     setBusy(true);
     try {
-      await api.register(username, password, tokenKey, inviteToken);
+      const u = await api.register(username, password, tokenKey, inviteToken);
+      if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
       router.push("/");
     } catch (err) {

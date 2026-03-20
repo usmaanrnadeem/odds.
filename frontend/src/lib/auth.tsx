@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { api, User } from "./api";
+import { api, User, tokenStore } from "./api";
 
 type AuthCtx = {
   user: User | null;
@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refresh() {
     try {
       const u = await api.me();
+      if (u.access_token) tokenStore.set(u.access_token);
       setUser(u);
     } catch {
       setUser(null);
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await api.logout().catch(() => {});
+    tokenStore.clear();
     setUser(null);
   }
 

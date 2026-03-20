@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -23,7 +23,8 @@ export default function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await api.login(username, password);
+      const u = await api.login(username, password);
+      if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
       router.push("/");
     } catch (err) {
