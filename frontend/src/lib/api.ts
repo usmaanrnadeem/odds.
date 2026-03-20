@@ -75,6 +75,9 @@ export const api = {
       body: JSON.stringify({ side, quantity }),
     }),
 
+  // Positions
+  position: (id: number) => req<{ yes: number; no: number }>(`/markets/${id}/position`),
+
   // Leaderboard + trophies
   leaderboard: () => req<LeaderboardEntry[]>("/leaderboard"),
   trophies: (userId: number) => req<Trophy[]>(`/users/${userId}/trophies`),
