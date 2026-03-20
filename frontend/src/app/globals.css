@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/* ── Design tokens ─────────────────────────────────────── */
+:root {
+  --canvas:  #0A0A0A;
+  --surface: #141414;
+  --border:  #242424;
+  --text:    #F5F5F5;
+  --muted:   #888888;
+  --accent:  #D4FF00;   /* electric lime — YES / live / #1 only */
+  --yes:     #D4FF00;
+  --no:      #FF4757;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ── Base ───────────────────────────────────────────────── */
+@theme inline {
+  --color-canvas:  var(--canvas);
+  --color-surface: var(--surface);
+  --color-border:  var(--border);
+  --color-text:    var(--text);
+  --color-muted:   var(--muted);
+  --color-accent:  var(--accent);
+  --color-yes:     var(--yes);
+  --color-no:      var(--no);
+  --font-sans:     var(--font-geist-sans);
+  --font-mono:     var(--font-geist-mono);
+}
+
+html, body {
+  background-color: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Utilities ──────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+/* Scrollbar — minimal */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

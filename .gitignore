@@ -1,2 +1,25 @@
+# secrets
 .env
+.env.*
+
+# python
 venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# sqlite (local dev only — prod uses Supabase)
+*.db
+
+# next.js
+.next/
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+
+# misc
+.gstack/
+.claude/
+curl
+-fsSL

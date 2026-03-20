@@ -1,0 +1,201 @@
+/**
+ * Thin API client. All requests go to NEXT_PUBLIC_API_URL.
+ * Credentials: "include" so httpOnly cookies are sent automatically.
+ */
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...init?.headers },
+    ...init,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, body.detail ?? "Unknown error");
+  }
+  return res.json();
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// ── Auth ─────────────────────────────────────────────────────
+
+export type User = {
+  user_id: number;
+  username: string;
+  points: number;
+  is_admin: boolean;
+  token_key: string;
+};
+
+export const api = {
+  // Auth
+  me: () => req<User>("/auth/me"),
+  login: (username: string, password: string) =>
+    req<User>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  register: (username: string, password: string, token_key: string, invite_token: string) =>
+    req<User>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ username, password, token_key, invite_token }),
+    }),
+  logout: () => req<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+
+  // Markets
+  markets: () => req<Market[]>("/markets"),
+  market: (id: number) => req<Market>(`/markets/${id}`),
+  activity: (id: number) => req<FeedEntry[]>(`/markets/${id}/activity`),
+  priceArc: (id: number) => req<number[]>(`/markets/${id}/price_arc`),
+  buy: (id: number, side: boolean, quantity: number) =>
+    req<TradeOut>(`/markets/${id}/buy`, {
+      method: "POST",
+      body: JSON.stringify({ side, quantity }),
+    }),
+  sell: (id: number, side: boolean, quantity: number) =>
+    req<TradeOut>(`/markets/${id}/sell`, {
+      method: "POST",
+      body: JSON.stringify({ side, quantity }),
+    }),
+
+  // Leaderboard + trophies
+  leaderboard: () => req<LeaderboardEntry[]>("/leaderboard"),
+  trophies: (userId: number) => req<Trophy[]>(`/users/${userId}/trophies`),
+
+  // Admin
+  createMarket: (title: string, description: string | null, b: number) =>
+    req<Market>("/admin/markets", {
+      method: "POST",
+      body: JSON.stringify({ title, description, b }),
+    }),
+  settleMarket: (id: number, side: boolean) =>
+    req<SettleResult>(`/admin/markets/${id}/settle`, {
+      method: "POST",
+      body: JSON.stringify({ side }),
+    }),
+  pendingMarkets: () => req<Market[]>("/admin/markets/pending"),
+  createInvite: () => req<{ token: string; expires_at: string }>("/admin/invites", { method: "POST" }),
+};
+
+// ── Types ─────────────────────────────────────────────────────
+
+export type Market = {
+  market_id: number;
+  title: string;
+  description: string | null;
+  b: number;
+  outstanding_yes: number;
+  outstanding_no: number;
+  status: "pending" | "open" | "settled";
+  yes_prob: number;
+  no_prob: number;
+  yes_odds: number;
+  no_odds: number;
+  created_at: string;
+  settled_at: string | null;
+  settled_side: boolean | null;
+};
+
+export type FeedEntry = {
+  trade_id: number;
+  username: string;
+  token_key: string;
+  side: boolean;
+  quantity: number;
+  cost: number;
+  timestamp: string;
+};
+
+export type TradeOut = {
+  trade_id: number;
+  market_id: number;
+  side: boolean;
+  quantity: number;
+  cost: number;
+  new_yes_odds: number;
+  new_no_odds: number;
+  new_yes_prob: number;
+  new_balance: number;
+};
+
+export type LeaderboardEntry = {
+  rank: number;
+  user_id: number;
+  username: string;
+  token_key: string;
+  points: number;
+  markets_participated: number;
+  markets_won: number;
+  accuracy: number;
+};
+
+export type Trophy = {
+  trophy_id: number;
+  market_id: number;
+  market_title: string;
+  rank: number;
+  profit: number;
+  title: string;
+  rarity: "legendary" | "rare" | "common";
+  created_at: string;
+  price_arc: number[];
+};
+
+export type SettleResult = {
+  ok: boolean;
+  settled_side: boolean;
+  rarity: string;
+  podium: { rank: number; username: string; token_key: string; profit: number }[];
+};
+
+// ── WebSocket ─────────────────────────────────────────────────
+
+export type WSTradeEvent = {
+  type: "trade";
+  market_id: number;
+  yes_prob: number;
+  no_prob: number;
+  yes_odds: number;
+  no_odds: number;
+  feed_entry: FeedEntry;
+};
+
+export type WSSettlementEvent = {
+  type: "settlement";
+  market_id: number;
+  market_title: string;
+  settled_side: boolean;
+  winner_username: string;
+  winner_token_key: string;
+  winner_profit: number;
+  winner_title: string;
+  podium: { rank: number; username: string; token_key: string; profit: number }[];
+  price_arc: number[];
+};
+
+export type WSEvent = WSTradeEvent | WSSettlementEvent;
+
+export function connectWS(onEvent: (e: WSEvent) => void): () => void {
+  const url = BASE.replace(/^http/, "ws") + "/ws";
+  let ws: WebSocket;
+  let dead = false;
+
+  function connect() {
+    ws = new WebSocket(url);
+    ws.onmessage = (e) => {
+      try {
+        onEvent(JSON.parse(e.data) as WSEvent);
+      } catch {/* ignore malformed frames */}
+    };
+    ws.onclose = () => {
+      if (!dead) setTimeout(connect, 3000); // reconnect
+    };
+  }
+
+  connect();
+  return () => { dead = true; ws?.close(); };
+}
