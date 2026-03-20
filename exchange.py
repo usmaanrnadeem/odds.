@@ -1,22 +1,25 @@
 import math
-import sqlite3
+import psycopg2
+import psycopg2.extras
+from dotenv import load_dotenv
+import os
 
-con = sqlite3.connect("exchange.db")
+load_dotenv()
 
-con.row_factory = sqlite3.Row
+con = psycopg2.connect(os.getenv("DATABASE_URL"))
 
-cur = con.cursor()
+cur = con.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 class User:
     def __init__(self, username: str, points: float=0):
         self.username = username
         self.points = points
         cur.execute(
-            "INSERT INTO users (username, points) VALUES (?,?)",
+            "INSERT INTO users (username, points) VALUES (%s,%s) RETURNING userID",
             (self.username,self.points)
         )
+        self.userID = cur.fetchone()["userID"]
         con.commit()
-        self.userID = cur.lastrowid
 
 class Markets:
     def __init__(self, b: int, outstandingYes: int=0, outstandingNo: int=0):
@@ -24,14 +27,14 @@ class Markets:
         self.outstandingYes = outstandingYes
         self.outstandingNo = outstandingNo
         cur.execute(
-            "INSERT INTO markets (b, outstandingYes, outstandingNo) VALUES (?,?,?)",
+            "INSERT INTO markets (b, outstandingYes, outstandingNo) VALUES (%s,%s,%s) RETURNING marketID",
             (self.b, self.outstandingYes, self.outstandingNo)
         )
+        self.marketID = cur.fetchone()["marketID"]
         con.commit()
-        self.marketID = cur.lastrowid
 
     def buy(self, userID: int, quantity: int, side: bool):
-        cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = ?",
+        cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = %s",
                     (self.marketID, )
         )
 
@@ -39,16 +42,16 @@ class Markets:
         
         cost = LMSRCostBuy(marketValues["b"], marketValues["outstandingYes"], marketValues["outstandingNo"], quantity, side)
 
-        cur.execute("SELECT * FROM users WHERE userID = ?",
+        cur.execute("SELECT * FROM users WHERE userID = %s",
                     (userID,)            
         )
         userRow = cur.fetchone()
         if userRow["points"] >= cost:
-            cur.execute("UPDATE users SET points = points - ? WHERE userID = ?",
+            cur.execute("UPDATE users SET points = points - %s WHERE userID = %s",
                         (cost, userID)
             )
 
-            cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
+            cur.execute("SELECT * FROM positions WHERE userID = %s AND marketID = %s",
                         (userID, self.marketID)
             )
             
@@ -57,31 +60,31 @@ class Markets:
             if side == 1: 
 
                 if pos:
-                    cur.execute("UPDATE positions SET yesPos = yesPos + ? WHERE userID = ? AND marketID = ?",
+                    cur.execute("UPDATE positions SET yesPos = yesPos + %s WHERE userID = %s AND marketID = %s",
                                 (quantity, userID, self.marketID)
                 )
                     
                 else:
-                    cur.execute("INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES (?,?,?,?)",
+                    cur.execute("INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES (%s,%s,%s,%s)",
                                 (userID, self.marketID, quantity, 0)
                     )
                     
-                cur.execute("UPDATE markets SET outstandingYes = outstandingYes + ? WHERE marketID = ?",
+                cur.execute("UPDATE markets SET outstandingYes = outstandingYes + %s WHERE marketID = %s",
                             (quantity, self.marketID)
                 )
             elif side == 0: 
 
                 if pos:
-                    cur.execute("UPDATE positions SET noPos = noPos + ? WHERE userID = ? AND marketID = ?",
+                    cur.execute("UPDATE positions SET noPos = noPos + %s WHERE userID = %s AND marketID = %s",
                                 (quantity, userID, self.marketID)
                 )
                     
                 else:
-                    cur.execute("INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES (?,?,?,?)",
+                    cur.execute("INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES (%s,%s,%s,%s)",
                                 (userID, self.marketID, 0, quantity)
                     )
                 
-                cur.execute("UPDATE markets SET outstandingNo = outstandingNo + ? WHERE marketID = ?",
+                cur.execute("UPDATE markets SET outstandingNo = outstandingNo + %s WHERE marketID = %s",
                             (quantity, self.marketID)
                 )
             con.commit()
@@ -92,7 +95,7 @@ class Markets:
 
     def sell(self, userID: int, quantity: int, side: bool):
 
-        cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = ?",
+        cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = %s",
                     (self.marketID, )
         )
 
@@ -100,7 +103,7 @@ class Markets:
         
         cost = LMSRCostSell(marketValues["b"], marketValues["outstandingYes"], marketValues["outstandingNo"], quantity, side)
 
-        cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
+        cur.execute("SELECT * FROM positions WHERE userID = %s AND marketID = %s",
                             (userID, self.marketID)
                 )
                 
@@ -117,13 +120,13 @@ class Markets:
                 
                 else:
 
-                    cur.execute("UPDATE users SET points = points + ? WHERE userID = ?",
+                    cur.execute("UPDATE users SET points = points + %s WHERE userID = %s",
                                 (cost, userID))
                     
-                    cur.execute("UPDATE positions SET yesPos = yesPos - ? WHERE userID = ? AND marketID = ?",
+                    cur.execute("UPDATE positions SET yesPos = yesPos - %s WHERE userID = %s AND marketID = %s",
                                 (quantity, userID, self.marketID))
                     
-                    cur.execute("UPDATE markets SET outstandingYes = outstandingYes - ? WHERE marketID = ?",
+                    cur.execute("UPDATE markets SET outstandingYes = outstandingYes - %s WHERE marketID = %s",
                                 (quantity, self.marketID))
             
                 con.commit()
@@ -136,13 +139,13 @@ class Markets:
                 
                 else:
 
-                    cur.execute("UPDATE users SET points = points + ? WHERE userID = ?",
+                    cur.execute("UPDATE users SET points = points + %s WHERE userID = %s",
                                 (cost, userID))
                     
-                    cur.execute("UPDATE positions SET noPos = noPos - ? WHERE userID = ? AND marketID = ?",
+                    cur.execute("UPDATE positions SET noPos = noPos - %s WHERE userID = %s AND marketID = %s",
                                 (quantity, userID, self.marketID))
                     
-                    cur.execute("UPDATE markets SET outstandingNo = outstandingNo - ? WHERE marketID = ?",
+                    cur.execute("UPDATE markets SET outstandingNo = outstandingNo - %s WHERE marketID = %s",
                                 (quantity, self.marketID))
                 
                 con.commit()
@@ -155,18 +158,18 @@ class Markets:
 
         if side == 1:
 
-            cur.execute("UPDATE users SET points = points + COALESCE((SELECT yesPos FROM positions WHERE positions.userID == users.userID AND marketID = ?), 0)",
+            cur.execute("UPDATE users SET points = points + COALESCE((SELECT yesPos FROM positions WHERE positions.userID = users.userID AND marketID = %s), 0)",
                         (self.marketID, ))
 
         elif side == 0:
 
-            cur.execute("UPDATE users SET points = points + COALESCE((SELECT noPos FROM positions WHERE positions.userID == users.userID AND marketID = ?), 0)",
+            cur.execute("UPDATE users SET points = points + COALESCE((SELECT noPos FROM positions WHERE positions.userID = users.userID AND marketID = %s), 0)",
                         (self.marketID, ))
 
-        cur.execute("DELETE FROM positions WHERE marketID = ?",
+        cur.execute("DELETE FROM positions WHERE marketID = %s",
                     (self.marketID, ))
         
-        cur.execute("UPDATE markets SET outstandingYes = 0, outstandingNo = 0 WHERE marketID = ?",
+        cur.execute("UPDATE markets SET outstandingYes = 0, outstandingNo = 0 WHERE marketID = %s",
                     (self.marketID, ))
 
         con.commit()

@@ -1,6 +1,9 @@
-import sqlite3
+import psycopg2
+from dotenv import load_dotenv
+import os
 
-con = sqlite3.connect("exchange.db")
+load_dotenv()
+con = psycopg2.connect(os.getenv("DATABASE_URL"))
 
 cur = con.cursor()
 
