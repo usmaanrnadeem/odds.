@@ -245,22 +245,16 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
             </button>
 
             {/* Position summary */}
-            {position && (position.yes > 0 || position.no > 0) && (
-              <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                {position.yes > 0 && (
-                  <div style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--accent)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", letterSpacing: "0.08em" }}>YES</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>{position.yes.toFixed(1)}</span>
-                  </div>
-                )}
-                {position.no > 0 && (
-                  <div style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--no)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--no)", letterSpacing: "0.08em" }}>NO</span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--no)" }}>{position.no.toFixed(1)}</span>
-                  </div>
-                )}
+            <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+              <div style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--accent)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", letterSpacing: "0.08em" }}>YES</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>{position ? position.yes.toFixed(1) : "—"}</span>
               </div>
-            )}
+              <div style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--no)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--no)", letterSpacing: "0.08em" }}>NO</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--no)" }}>{position ? position.no.toFixed(1) : "—"}</span>
+              </div>
+            </div>
           </div>
         )}
 
