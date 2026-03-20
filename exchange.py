@@ -174,6 +174,69 @@ class Markets:
                 ledger.removePos(ledger.get(user.userID, self.marketID), quantity, side)
                 self.outstandingNo -= quantity
 
+    def sellRewrite(self, userID: int, quantity: int, side: bool):
+
+        cur.execute("SELECT b, outstandingYes, outstandingNo FROM markets WHERE marketID = ?",
+                    (self.marketID, )
+        )
+
+        marketValues  = cur.fetchone()
+        
+        cost = LMSRCostSell(marketValues["b"], marketValues["outstandingYes"], marketValues["outstandingNo"], quantity, side)
+
+        cur.execute("SELECT * FROM positions WHERE userID = ? AND marketID = ?",
+                            (userID, self.marketID)
+                )
+                
+        pos = cur.fetchone()
+        
+        if side == 1:
+
+            if pos: 
+
+                if pos["yesPos"] < quantity:
+                    raise ValueError
+                
+                else:
+
+                    cur.execute("UPDATE users SET points = points + ? WHERE userID = ?",
+                                (cost, userID))
+                    
+                    cur.execute("UPDATE positions SET yesPos = yesPos - ? WHERE userID = ? AND marketID = ?",
+                                (quantity, userID, self.marketID))
+                    
+                    cur.execute("UPDATE markets SET outstandingYes = outstandingYes - ? WHERE marketID = ?",
+                                (quantity, self.marketID))
+            
+            else:
+                raise ValueError
+            
+            return
+
+        elif side == 0:
+
+            if pos:
+
+                if pos["noPos"] < quantity:
+                    raise ValueError
+                
+                else:
+
+                    cur.execute("UPDATE users SET points = points + ? WHERE userID = ?",
+                                (cost, userID))
+                    
+                    cur.execute("UPDATE positions SET noPos = noPos - ? WHERE userID = ? AND marketID = ?",
+                                (quantity, userID, self.marketID))
+                    
+                    cur.execute("UPDATE markets SET outstandingNo = outstandingNo - ? WHERE marketID = ?",
+                                (quantity, self.marketID))
+            
+            else:
+                raise ValueError
+            
+            return
+
+
     def settlement(self, side: bool, ledger: PositionStore):
         for user in users:
             if ledger.contains((user.userID, self.marketID)):
