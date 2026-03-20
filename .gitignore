@@ -21,5 +21,3 @@ frontend/.env.local
 # misc
 .gstack/
 .claude/
-curl
--fsSL
