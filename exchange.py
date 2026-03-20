@@ -150,6 +150,7 @@ class Markets:
                 cur.execute("UPDATE markets SET outstandingNo = outstandingNo + ? WHERE marketID = ?",
                             (quantity, self.marketID)
                 )
+            con.commit()
             return
         else:
             return ValueError
@@ -211,6 +212,7 @@ class Markets:
             else:
                 raise ValueError
             
+            con.commit()
             return
 
         elif side == 0:
@@ -234,6 +236,7 @@ class Markets:
             else:
                 raise ValueError
             
+            con.commit()
             return
 
 
@@ -253,6 +256,26 @@ class Markets:
 
         self.outstandingYes = 0
         self.outstandingNo = 0
+
+    def settlementRewrite(self, side: bool):
+
+        if side == 1:
+
+            cur.execute("UPDATE users SET points = points + COALESCE((SELECT yesPos FROM positions WHERE positions.userID == users.userID AND marketID = ?), 0)",
+                        (self.marketID, ))
+
+        elif side == 0:
+
+            cur.execute("UPDATE users SET points = points + COALESCE((SELECT noPos FROM positions WHERE positions.userID == users.userID AND marketID = ?), 0)",
+                        (self.marketID, ))
+
+        cur.execute("DELETE FROM positions WHERE marketID = ?",
+                    (self.marketID, ))
+        
+        cur.execute("UPDATE markets SET outstandingYes = 0, outstandingNo = 0 WHERE marketID = ?",
+                    (self.marketID, ))
+
+        con.commit()
 
 def LMSRCurrentPrice(b: float, yesQuantity: int, noQuantity: int) -> float:
     
