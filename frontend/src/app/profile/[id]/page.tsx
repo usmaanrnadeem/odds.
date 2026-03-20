@@ -179,7 +179,6 @@ function TrophyModal({ trophy, tokenKey, onClose }: {
           style={{
             width: "100%", padding: "12px",
             background: "transparent",
-            borderTop: `1px solid ${r.color}33`,
             border: "none",
             borderTop: `1px solid ${r.color}33`,
             color: "var(--muted)",
