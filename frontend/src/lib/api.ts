@@ -25,7 +25,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, body.detail ?? "Unknown error");
+    const detail = Array.isArray(body.detail)
+      ? body.detail.map((e: { msg: string }) => e.msg).join(", ")
+      : (body.detail ?? "Unknown error");
+    throw new ApiError(res.status, String(detail));
   }
   return res.json();
 }
