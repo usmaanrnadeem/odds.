@@ -19,7 +19,7 @@ async def init_pool() -> None:
         database=os.getenv("DB_NAME"),
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
-        min_size=2,
+        min_size=5,
         max_size=10,
         ssl="require",
     )
