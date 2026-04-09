@@ -84,6 +84,8 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
+    // Logged in but not in a group yet → must join or create one
+    if (!loading && user && !user.group_id && !user.is_admin) router.replace("/join");
   }, [user, loading, router]);
 
   useEffect(() => {
@@ -135,7 +137,7 @@ export default function HomePage() {
           <>
             {open.length === 0 && (
               <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>
-                no open markets — ask an admin to create one
+                no open markets yet
               </p>
             )}
             {open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}

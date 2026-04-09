@@ -26,6 +26,9 @@ from . import market_cache
 from .models import (
     BuyRequest,
     FeedEntry,
+    GroupCreate,
+    GroupJoin,
+    GroupOut,
     InviteOut,
     LeaderboardEntry,
     LoginRequest,
@@ -58,23 +61,31 @@ async def lifespan(app: FastAPI):
 
 
 async def _warm_market_cache() -> None:
-    """Pre-populate the in-memory market cache for all open markets.
-
-    Eliminates the lazy-load DB round trip on the very first trade after
-    each deploy.  Runs once at startup, costs 1 DB query total.
-    """
     pool = get_pool()
     rows = await pool.fetch(
-        "SELECT marketid, b, outstandingyes, outstandingno, status FROM markets WHERE status = 'open'"
+        "SELECT marketid, b, outstandingyes, outstandingno, status, group_id FROM markets WHERE status = 'open'"
     )
     for row in rows:
         market_cache._cache[row["marketid"]] = {
-            "b":       float(row["b"]),
-            "yes_qty": float(row["outstandingyes"]),
-            "no_qty":  float(row["outstandingno"]),
-            "status":  row["status"],
+            "b":        float(row["b"]),
+            "yes_qty":  float(row["outstandingyes"]),
+            "no_qty":   float(row["outstandingno"]),
+            "status":   row["status"],
+            "group_id": row["group_id"],
         }
     logger.info("Market cache warmed: %d open markets", len(rows))
+
+
+# ── Shared helper ─────────────────────────────────────────────
+
+_USER_GROUP_SQL = """
+SELECT u.userid, u.username, u.points, u.is_admin, u.token_key,
+       gm.group_id, g.name AS group_name, gm.role AS group_role
+FROM users u
+LEFT JOIN group_memberships gm ON gm.user_id = u.userid
+LEFT JOIN groups g ON g.group_id = gm.group_id
+WHERE u.userid = $1
+"""
 
 
 # ── App ──────────────────────────────────────────────────────
@@ -125,46 +136,16 @@ async def _require_market(pool: asyncpg.Pool, market_id: int) -> asyncpg.Record:
 @app.post("/auth/register", response_model=UserOut)
 async def register(body: RegisterRequest, response: Response):
     pool = get_pool()
-
-    # Validate invite token
     async with pool.acquire() as con:
-        invite = await con.fetchrow(
-            "SELECT * FROM invite_tokens WHERE token = $1", body.invite_token
-        )
-        if not invite:
-            raise HTTPException(status_code=400, detail="Invalid invite token")
-        if invite["used_at"] is not None:
-            raise HTTPException(status_code=400, detail="Invite token already used")
-        if invite["expires_at"] < datetime.now(timezone.utc):
-            raise HTTPException(status_code=400, detail="Invite token expired")
-
-        # Check username
-        existing = await con.fetchrow("SELECT 1 FROM users WHERE username = $1", body.username)
-        if existing:
+        if await con.fetchrow("SELECT 1 FROM users WHERE username = $1", body.username):
             raise HTTPException(status_code=409, detail="Username already taken")
-
-        # Create user
         user = await con.fetchrow(
-            """
-            INSERT INTO users (username, password_hash, token_key)
-            VALUES ($1, $2, $3)
-            RETURNING userID, username, points, is_admin, token_key
-            """,
-            body.username,
-            hash_password(body.password),
-            body.token_key,
-        )
-
-        # Mark invite as used
-        await con.execute(
-            "UPDATE invite_tokens SET used_at = NOW(), used_by = $1 WHERE token = $2",
-            user["userid"],
-            body.invite_token,
+            "INSERT INTO users (username, password_hash, token_key) VALUES ($1, $2, $3) RETURNING *",
+            body.username, hash_password(body.password), body.token_key,
         )
 
     token = create_token(user["userid"], user["is_admin"])
     response.set_cookie("access_token", token, httponly=True, samesite="none", secure=True, max_age=86400)
-
     return UserOut(
         user_id=user["userid"],
         username=user["username"],
@@ -178,20 +159,31 @@ async def register(body: RegisterRequest, response: Response):
 @app.post("/auth/login", response_model=UserOut)
 async def login(body: LoginRequest, response: Response):
     pool = get_pool()
-    user = await pool.fetchrow("SELECT * FROM users WHERE username = $1", body.username)
-    if not user or not verify_password(body.password, user["password_hash"]):
+    row = await pool.fetchrow(
+        """
+        SELECT u.*, gm.group_id, g.name AS group_name, gm.role AS group_role
+        FROM users u
+        LEFT JOIN group_memberships gm ON gm.user_id = u.userid
+        LEFT JOIN groups g ON g.group_id = gm.group_id
+        WHERE u.username = $1
+        """,
+        body.username,
+    )
+    if not row or not verify_password(body.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
-    token = create_token(user["userid"], user["is_admin"])
+    token = create_token(row["userid"], row["is_admin"], row["group_id"], row["group_role"])
     response.set_cookie("access_token", token, httponly=True, samesite="none", secure=True, max_age=86400)
-
     return UserOut(
-        user_id=user["userid"],
-        username=user["username"],
-        points=float(user["points"]),
-        is_admin=user["is_admin"],
-        token_key=user["token_key"],
+        user_id=row["userid"],
+        username=row["username"],
+        points=float(row["points"]),
+        is_admin=row["is_admin"],
+        token_key=row["token_key"],
         access_token=token,
+        group_id=row["group_id"],
+        group_name=row["group_name"],
+        group_role=row["group_role"],
     )
 
 
@@ -204,31 +196,115 @@ async def logout(response: Response):
 @app.get("/auth/me", response_model=UserOut)
 async def me(current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
-    user = await pool.fetchrow("SELECT * FROM users WHERE userID = $1", current["user_id"])
+    row = await pool.fetchrow(_USER_GROUP_SQL, current["user_id"])
     return UserOut(
-        user_id=user["userid"],
-        username=user["username"],
-        points=float(user["points"]),
-        is_admin=user["is_admin"],
-        token_key=user["token_key"],
+        user_id=row["userid"],
+        username=row["username"],
+        points=float(row["points"]),
+        is_admin=row["is_admin"],
+        token_key=row["token_key"],
+        group_id=row["group_id"],
+        group_name=row["group_name"],
+        group_role=row["group_role"],
+    )
+
+
+# ── Group routes ─────────────────────────────────────────────
+
+@app.post("/groups", response_model=GroupOut)
+async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_current_user)]):
+    """Create a new universe. Requires a master-admin invite token. Creator becomes group admin."""
+    pool = get_pool()
+    async with pool.acquire() as con:
+        invite = await con.fetchrow("SELECT * FROM invite_tokens WHERE token = $1", body.invite_token)
+        if not invite or invite["used_at"] is not None:
+            raise HTTPException(status_code=400, detail="Invalid or already-used invite token")
+        if invite["expires_at"] < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Invite token expired")
+
+        if await con.fetchrow("SELECT 1 FROM group_memberships WHERE user_id = $1", current["user_id"]):
+            raise HTTPException(status_code=400, detail="You are already in a group")
+
+        if await con.fetchrow("SELECT 1 FROM groups WHERE name = $1", body.name):
+            raise HTTPException(status_code=409, detail="Group name already taken")
+
+        async with con.transaction():
+            group = await con.fetchrow(
+                "INSERT INTO groups (name, password_hash, created_by) VALUES ($1, $2, $3) RETURNING *",
+                body.name, hash_password(body.password), current["user_id"],
+            )
+            await con.execute(
+                "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'admin')",
+                group["group_id"], current["user_id"],
+            )
+            await con.execute(
+                "UPDATE invite_tokens SET used_at = NOW(), used_by = $1 WHERE token = $2",
+                current["user_id"], body.invite_token,
+            )
+
+    token = create_token(current["user_id"], current["is_admin"], group["group_id"], "admin")
+    return GroupOut(
+        group_id=group["group_id"],
+        name=group["name"],
+        role="admin",
+        created_at=group["created_at"].isoformat(),
+        access_token=token,
+    )
+
+
+@app.post("/groups/join", response_model=GroupOut)
+async def join_group(body: GroupJoin, current: Annotated[dict, Depends(get_current_user)]):
+    """Join an existing universe by name + password. No invite required."""
+    pool = get_pool()
+    async with pool.acquire() as con:
+        if await con.fetchrow("SELECT 1 FROM group_memberships WHERE user_id = $1", current["user_id"]):
+            raise HTTPException(status_code=400, detail="You are already in a group")
+
+        group = await con.fetchrow("SELECT * FROM groups WHERE name = $1", body.name)
+        if not group or not verify_password(body.password, group["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid group name or password")
+
+        await con.execute(
+            "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'member')",
+            group["group_id"], current["user_id"],
+        )
+
+    token = create_token(current["user_id"], current["is_admin"], group["group_id"], "member")
+    return GroupOut(
+        group_id=group["group_id"],
+        name=group["name"],
+        role="member",
+        created_at=group["created_at"].isoformat(),
+        access_token=token,
     )
 
 
 # ── Market routes ────────────────────────────────────────────
 
 @app.get("/markets", response_model=list[MarketOut])
-async def list_markets(_: Annotated[dict, Depends(get_current_user)]):
+async def list_markets(current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
-    rows = await pool.fetch(
-        "SELECT * FROM markets WHERE status IN ('open', 'settled') ORDER BY created_at DESC"
-    )
+    if current["is_admin"]:
+        rows = await pool.fetch(
+            "SELECT * FROM markets WHERE status IN ('open','settled') ORDER BY created_at DESC"
+        )
+    else:
+        group_id = current.get("group_id")
+        if not group_id:
+            return []
+        rows = await pool.fetch(
+            "SELECT * FROM markets WHERE group_id = $1 AND status IN ('open','settled') ORDER BY created_at DESC",
+            group_id,
+        )
     return [_market_out(r) for r in rows]
 
 
 @app.get("/markets/{market_id}", response_model=MarketOut)
-async def get_market(market_id: int, _: Annotated[dict, Depends(get_current_user)]):
+async def get_market(market_id: int, current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
     row = await _require_market(pool, market_id)
+    if not current["is_admin"] and row["group_id"] != current.get("group_id"):
+        raise HTTPException(status_code=404, detail="Market not found")
     return _market_out(row)
 
 
@@ -307,6 +383,9 @@ async def buy(
             raise HTTPException(status_code=404, detail="Market not found")
         if state["status"] != "open":
             raise HTTPException(status_code=400, detail="Market is not open")
+
+        if not current["is_admin"] and state.get("group_id") != current.get("group_id"):
+            raise HTTPException(status_code=403, detail="Market not in your group")
 
         b       = state["b"]
         yes_qty = state["yes_qty"]
@@ -449,6 +528,9 @@ async def sell(
         if state["status"] != "open":
             raise HTTPException(status_code=400, detail="Market is not open")
 
+        if not current["is_admin"] and state.get("group_id") != current.get("group_id"):
+            raise HTTPException(status_code=403, detail="Market not in your group")
+
         b       = state["b"]
         yes_qty = state["yes_qty"]
         no_qty  = state["no_qty"]
@@ -574,25 +656,42 @@ async def sell(
 # ── Leaderboard ──────────────────────────────────────────────
 
 @app.get("/leaderboard", response_model=list[LeaderboardEntry])
-async def leaderboard(_: Annotated[dict, Depends(get_current_user)]):
+async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
-    rows = await pool.fetch(
-        """
-        SELECT
-            u.userID,
-            u.username,
-            u.token_key,
-            u.points,
-            COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE)    AS markets_participated,
-            COUNT(DISTINCT th.marketID)                                     AS markets_won
-        FROM users u
-        LEFT JOIN trades t  ON t.userID = u.userID
-        LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
-        WHERE u.is_admin = FALSE
-        GROUP BY u.userID
-        ORDER BY u.points DESC
-        """
-    )
+    group_id = current.get("group_id")
+    if not group_id and not current["is_admin"]:
+        return []
+
+    if current["is_admin"] and not group_id:
+        # Master admin with no group: show all non-admin users
+        rows = await pool.fetch(
+            """
+            SELECT u.userID, u.username, u.token_key, u.points,
+                   COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE) AS markets_participated,
+                   COUNT(DISTINCT th.marketID)                                  AS markets_won
+            FROM users u
+            LEFT JOIN trades t  ON t.userID = u.userID
+            LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
+            WHERE u.is_admin = FALSE
+            GROUP BY u.userID
+            ORDER BY u.points DESC
+            """
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT u.userID, u.username, u.token_key, u.points,
+                   COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE) AS markets_participated,
+                   COUNT(DISTINCT th.marketID)                                  AS markets_won
+            FROM users u
+            JOIN group_memberships gm ON gm.user_id = u.userid AND gm.group_id = $1
+            LEFT JOIN trades t  ON t.userID = u.userID AND t.is_bot = FALSE
+            LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
+            GROUP BY u.userID
+            ORDER BY u.points DESC
+            """,
+            group_id,
+        )
     result = []
     for i, r in enumerate(rows):
         participated = int(r["markets_participated"] or 0)
@@ -659,16 +758,18 @@ async def create_market(
     body: MarketCreate,
     current: Annotated[dict, Depends(get_current_user)],
 ):
-    if not current["is_admin"]:
-        raise HTTPException(status_code=403, detail="Admin only")
+    is_group_admin = current.get("group_role") == "admin"
+    if not current["is_admin"] and not is_group_admin:
+        raise HTTPException(status_code=403, detail="Group admin only")
+
+    group_id = current.get("group_id")
+    if not current["is_admin"] and not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+
     pool = get_pool()
     row = await pool.fetchrow(
-        """
-        INSERT INTO markets (title, description, b, status, created_by)
-        VALUES ($1, $2, $3, 'open', $4)
-        RETURNING *
-        """,
-        body.title, body.description, body.b, current["user_id"],
+        "INSERT INTO markets (title, description, b, status, created_by, group_id) VALUES ($1, $2, $3, 'open', $4, $5) RETURNING *",
+        body.title, body.description, body.b, current["user_id"], group_id,
     )
     return _market_out(row)
 
@@ -697,8 +798,9 @@ async def settle_market(
     body: SettleRequest,
     current: Annotated[dict, Depends(get_current_user)],
 ):
-    if not current["is_admin"]:
-        raise HTTPException(status_code=403, detail="Admin only")
+    is_group_admin = current.get("group_role") == "admin"
+    if not current["is_admin"] and not is_group_admin:
+        raise HTTPException(status_code=403, detail="Group admin only")
 
     pool = get_pool()
     async with pool.acquire() as con:
@@ -708,6 +810,8 @@ async def settle_market(
             )
             if not market:
                 raise HTTPException(status_code=404, detail="Market not found")
+            if not current["is_admin"] and market["group_id"] != current.get("group_id"):
+                raise HTTPException(status_code=403, detail="Market not in your group")
             if market["status"] == "settled":
                 raise HTTPException(status_code=400, detail="Market already settled")
             if market["status"] != "open":

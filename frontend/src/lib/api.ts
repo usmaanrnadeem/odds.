@@ -45,6 +45,17 @@ export type User = {
   is_admin: boolean;
   token_key: string;
   access_token?: string;
+  group_id:   number | null;
+  group_name: string | null;
+  group_role: "admin" | "member" | null;
+};
+
+export type Group = {
+  group_id: number;
+  name: string;
+  role: "admin" | "member";
+  created_at: string;
+  access_token: string;
 };
 
 export const api = {
@@ -52,12 +63,24 @@ export const api = {
   me: () => req<User>("/auth/me"),
   login: (username: string, password: string) =>
     req<User>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-  register: (username: string, password: string, token_key: string, invite_token: string) =>
+  register: (username: string, password: string, token_key: string) =>
     req<User>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password, token_key, invite_token }),
+      body: JSON.stringify({ username, password, token_key }),
     }),
   logout: () => req<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+
+  // Groups
+  createGroup: (name: string, password: string, invite_token: string) =>
+    req<Group>("/groups", {
+      method: "POST",
+      body: JSON.stringify({ name, password, invite_token }),
+    }),
+  joinGroup: (name: string, password: string) =>
+    req<Group>("/groups/join", {
+      method: "POST",
+      body: JSON.stringify({ name, password }),
+    }),
 
   // Markets
   markets: () => req<Market[]>("/markets"),

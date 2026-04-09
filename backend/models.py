@@ -15,7 +15,26 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
     password: str = Field(..., min_length=6)
     token_key: VALID_TOKENS = "rocket"
-    invite_token: str
+    # invite_token removed — registration is now open; invite is used to CREATE a group
+
+
+class GroupCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=50)
+    password: str = Field(..., min_length=4)
+    invite_token: str  # consumed to create the group; creator becomes group admin
+
+
+class GroupJoin(BaseModel):
+    name: str
+    password: str
+
+
+class GroupOut(BaseModel):
+    group_id: int
+    name: str
+    role: str        # 'admin' | 'member'
+    created_at: str
+    access_token: str  # new JWT with group_id embedded — client must store this
 
 
 class LoginRequest(BaseModel):
@@ -30,6 +49,9 @@ class UserOut(BaseModel):
     is_admin: bool
     token_key: str
     access_token: Optional[str] = None
+    group_id:   Optional[int] = None
+    group_name: Optional[str] = None
+    group_role: Optional[str] = None   # 'admin' | 'member' | None
 
 
 # ── Markets ─────────────────────────────────────────────────

@@ -47,16 +47,17 @@ async def get_state(pool: asyncpg.Pool, market_id: int) -> Optional[dict]:
     """
     if market_id not in _cache:
         row = await pool.fetchrow(
-            "SELECT b, outstandingyes, outstandingno, status FROM markets WHERE marketid = $1",
+            "SELECT b, outstandingyes, outstandingno, status, group_id FROM markets WHERE marketid = $1",
             market_id,
         )
         if not row:
             return None
         _cache[market_id] = {
-            "b":       float(row["b"]),
-            "yes_qty": float(row["outstandingyes"]),
-            "no_qty":  float(row["outstandingno"]),
-            "status":  row["status"],
+            "b":        float(row["b"]),
+            "yes_qty":  float(row["outstandingyes"]),
+            "no_qty":   float(row["outstandingno"]),
+            "status":   row["status"],
+            "group_id": row["group_id"],
         }
     return _cache[market_id]
 

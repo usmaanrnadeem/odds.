@@ -28,9 +28,17 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT ─────────────────────────────────────────────────────
 
-def create_token(user_id: int, is_admin: bool) -> str:
+def create_token(
+    user_id: int,
+    is_admin: bool,
+    group_id: int | None = None,
+    group_role: str | None = None,
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload = {"sub": str(user_id), "admin": is_admin, "exp": expire}
+    payload: dict = {"sub": str(user_id), "admin": is_admin, "exp": expire}
+    if group_id is not None:
+        payload["gid"] = group_id
+        payload["grl"] = group_role
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -57,7 +65,12 @@ def get_current_user(
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     payload = _decode_token(token)
-    return {"user_id": int(payload["sub"]), "is_admin": payload.get("admin", False)}
+    return {
+        "user_id":    int(payload["sub"]),
+        "is_admin":   payload.get("admin", False),
+        "group_id":   payload.get("gid"),    # None if not yet in a group
+        "group_role": payload.get("grl"),    # None if not yet in a group
+    }
 
 
 def get_admin_user(current: dict = None) -> dict:

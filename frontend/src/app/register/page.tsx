@@ -11,22 +11,21 @@ export default function RegisterPage() {
   const router = useRouter();
   const { refresh } = useUser();
 
-  const [username,    setUsername]    = useState("");
-  const [password,    setPassword]    = useState("");
-  const [inviteToken, setInviteToken] = useState("");
-  const [tokenKey,    setTokenKey]    = useState<TokenKey>("rocket");
-  const [error,       setError]       = useState("");
-  const [busy,        setBusy]        = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [tokenKey, setTokenKey] = useState<TokenKey>("rocket");
+  const [error,    setError]    = useState("");
+  const [busy,     setBusy]     = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      const u = await api.register(username, password, tokenKey, inviteToken);
+      const u = await api.register(username, password, tokenKey);
       if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
-      router.push("/");
+      router.push("/join");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
     } finally {
@@ -97,15 +96,6 @@ export default function RegisterPage() {
             autoComplete="new-password"
             className="auth-input"
           />
-          <input
-            type="text"
-            placeholder="invite token"
-            value={inviteToken}
-            onChange={e => setInviteToken(e.target.value)}
-            required
-            className="auth-input"
-          />
-
           {error && (
             <p className="text-sm text-center" style={{ color: "var(--no)" }}>{error}</p>
           )}

@@ -67,6 +67,19 @@ export default function Nav() {
           >
             trophies
           </Link>
+          {user.group_role === "admin" && (
+            <Link
+              href="/manage"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 13,
+                color: pathname === "/manage" ? "var(--text)" : "var(--muted)",
+                textDecoration: "none",
+              }}
+            >
+              manage
+            </Link>
+          )}
           {user.is_admin && (
             <Link
               href="/admin"
