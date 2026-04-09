@@ -7,6 +7,7 @@ type AuthCtx = {
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
+  updatePoints: (points: number) => void;
 };
 
 const Ctx = createContext<AuthCtx>({
@@ -14,6 +15,7 @@ const Ctx = createContext<AuthCtx>({
   loading: true,
   refresh: async () => {},
   logout: async () => {},
+  updatePoints: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -30,6 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function updatePoints(points: number) {
+    setUser(prev => prev ? { ...prev, points } : null);
+  }
+
   async function logout() {
     await api.logout().catch(() => {});
     tokenStore.clear();
@@ -40,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh().finally(() => setLoading(false));
   }, []);
 
-  return <Ctx.Provider value={{ user, loading, refresh, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, loading, refresh, logout, updatePoints }}>{children}</Ctx.Provider>;
 }
 
 export function useUser() {

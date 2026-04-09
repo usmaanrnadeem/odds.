@@ -15,8 +15,10 @@ function OddsBar({ yesProb }: { yesProb: number }) {
   );
 }
 
-function MarketCard({ market }: { market: Market }) {
+function MarketCard({ market, position }: { market: Market; position?: { yes: number; no: number } }) {
   const settled = market.status === "settled";
+  const hasYes = (position?.yes ?? 0) > 0;
+  const hasNo  = (position?.no  ?? 0) > 0;
   return (
     <Link href={`/markets/${market.market_id}`} style={{ textDecoration: "none" }}>
       <div
@@ -53,6 +55,21 @@ function MarketCard({ market }: { market: Market }) {
           </span>
         </div>
         <OddsBar yesProb={market.yes_prob} />
+        {/* Position row — only show when user holds a position */}
+        {(hasYes || hasNo) && (
+          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            {hasYes && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)", padding: "2px 6px" }}>
+                YES {position!.yes.toFixed(0)}×
+              </span>
+            )}
+            {hasNo && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--no)", background: "color-mix(in srgb, var(--no) 12%, transparent)", padding: "2px 6px" }}>
+                NO {position!.no.toFixed(0)}×
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );
@@ -61,8 +78,9 @@ function MarketCard({ market }: { market: Market }) {
 export default function HomePage() {
   const { user, loading } = useUser();
   const router = useRouter();
-  const [markets, setMarkets] = useState<Market[]>([]);
-  const [fetching, setFetching] = useState(true);
+  const [markets,   setMarkets]   = useState<Market[]>([]);
+  const [positions, setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
+  const [fetching,  setFetching]  = useState(true);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -70,7 +88,14 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return;
-    api.markets().then(setMarkets).finally(() => setFetching(false));
+    Promise.all([
+      api.markets(),
+      api.allPositions(),
+    ]).then(([mkts, pos]) => {
+      setMarkets(mkts);
+      setPositions(new Map(pos.map(p => [p.market_id, p])));
+    }).finally(() => setFetching(false));
+
     const disconnect = connectWS((event: WSEvent) => {
       if (event.type === "trade") {
         setMarkets(prev =>
@@ -96,7 +121,7 @@ export default function HomePage() {
   return (
     <>
       <Nav />
-      <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+      <main className="page-content">
         <div style={{ marginBottom: 24, display: "flex", alignItems: "baseline", gap: 8 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, color: "var(--text)" }}>
             {user.points.toFixed(0)}
@@ -113,7 +138,7 @@ export default function HomePage() {
                 no open markets — ask an admin to create one
               </p>
             )}
-            {open.map(m => <MarketCard key={m.market_id} market={m} />)}
+            {open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
           </>
         )}
       </main>

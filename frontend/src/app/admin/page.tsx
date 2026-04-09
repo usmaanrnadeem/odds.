@@ -80,7 +80,7 @@ export default function AdminPage() {
   return (
     <>
       <Nav />
-      <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+      <main className="page-content">
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", marginBottom: 24 }}>
           ADMIN
         </p>

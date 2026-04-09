@@ -38,7 +38,7 @@ function OddsBar({ yesProb }: { yesProb: number }) {
 export default function MarketPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const marketId = parseInt(id);
-  const { user, loading, refresh } = useUser();
+  const { user, loading, updatePoints } = useUser();
   const router = useRouter();
 
   const [market,   setMarket]   = useState<Market | null>(null);
@@ -96,7 +96,16 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
         ? `Bought ${qty} ${side ? "YES" : "NO"} for ${result.cost.toFixed(1)} pts`
         : `Sold ${qty} ${side ? "YES" : "NO"} for ${result.cost.toFixed(1)} pts`
       );
-      await refresh(); // update balance
+      // Update balance from trade response — no extra API round trip
+      updatePoints(result.new_balance);
+      // Optimistically update position, then confirm from server in background
+      setPosition(prev => {
+        if (!prev) return prev;
+        const delta = tab === "buy" ? qty : -qty;
+        return side
+          ? { ...prev, yes: Math.max(0, prev.yes + delta) }
+          : { ...prev, no:  Math.max(0, prev.no  + delta) };
+      });
       api.position(marketId).then(setPosition).catch(() => {});
       setTimeout(() => setFlash(null), 3000);
     } catch (err) {
@@ -113,7 +122,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
   return (
     <>
       <Nav />
-      <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+      <main className="page-content">
         {/* Back */}
         <button
           onClick={() => router.push("/")}
@@ -217,10 +226,22 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
             {/* Quantity */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <button onClick={() => setQty(q => Math.max(1, q - 1))} style={qBtnStyle}>−</button>
-              <span style={{ flex: 1, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>
-                {qty}
-              </span>
-              <button onClick={() => setQty(q => Math.min(10000, q + 10))} style={qBtnStyle}>+10</button>
+              <input
+                type="number"
+                value={qty}
+                min={1}
+                max={10000}
+                onChange={e => {
+                  const v = parseInt(e.target.value);
+                  if (!isNaN(v) && v >= 1 && v <= 10000) setQty(v);
+                }}
+                style={{
+                  flex: 1, textAlign: "center",
+                  fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700,
+                  color: "var(--text)", background: "var(--canvas)",
+                  border: "1px solid var(--border)", padding: "8px 4px",
+                }}
+              />
               <button onClick={() => setQty(q => Math.min(10000, q + 1))} style={qBtnStyle}>+</button>
             </div>
 
@@ -246,14 +267,27 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
             {/* Position summary */}
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-              <div style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--accent)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", letterSpacing: "0.08em" }}>YES</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>{position ? position.yes.toFixed(1) : "—"}</span>
-              </div>
-              <div style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--no)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--no)", letterSpacing: "0.08em" }}>NO</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--no)" }}>{position ? position.no.toFixed(1) : "—"}</span>
-              </div>
+              {(["yes", "no"] as const).map(side => {
+                const val = position?.[side] ?? 0;
+                const active = val > 0;
+                const col = side === "yes" ? "var(--accent)" : "var(--no)";
+                return (
+                  <div key={side} style={{
+                    flex: 1, padding: "8px 10px",
+                    border: `1px solid ${active ? col : "var(--border)"}`,
+                    background: active ? `color-mix(in srgb, ${col} 8%, transparent)` : "transparent",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    transition: "border-color 0.2s, background 0.2s",
+                  }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", color: active ? col : "var(--muted)" }}>
+                      {side.toUpperCase()}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: active ? col : "var(--muted)" }}>
+                      {position ? (active ? val.toFixed(1) : "—") : "—"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

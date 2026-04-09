@@ -33,17 +33,7 @@ export default function Nav() {
         zIndex: 50,
       }}
     >
-      <div
-        style={{
-          maxWidth: 480,
-          margin: "0 auto",
-          padding: "0 16px",
-          height: 52,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
+      <div className="nav-inner">
         {/* Logo */}
         <Link href="/" style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 18, color: "var(--accent)", textDecoration: "none" }}>
           odds.

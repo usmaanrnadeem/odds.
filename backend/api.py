@@ -219,6 +219,16 @@ async def my_position(market_id: int, current: Annotated[dict, Depends(get_curre
     return {"yes": float(row["yespos"]) if row else 0.0, "no": float(row["nopos"]) if row else 0.0}
 
 
+@app.get("/users/me/positions")
+async def all_my_positions(current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    rows = await pool.fetch(
+        "SELECT marketID AS market_id, yesPos AS yes, noPos AS no FROM positions WHERE userID = $1",
+        current["user_id"],
+    )
+    return [{"market_id": r["market_id"], "yes": float(r["yes"]), "no": float(r["no"])} for r in rows]
+
+
 @app.get("/markets/{market_id}/price_arc", response_model=list[float])
 async def market_price_arc(market_id: int, _: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()

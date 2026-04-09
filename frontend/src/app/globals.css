@@ -43,3 +43,30 @@ html, body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Responsive layout ──────────────────────────────────── */
+/* Nav inner container */
+.nav-inner {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 16px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+/* Page content wrapper */
+.page-content {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+@media (min-width: 640px) {
+  .nav-inner  { max-width: 800px; padding: 0 32px; }
+  .page-content { max-width: 800px; padding: 32px 32px; }
+}
+
+/* ── Number input — hide spin buttons ───────────────────── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }

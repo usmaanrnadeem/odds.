@@ -207,6 +207,7 @@ function TrophyCard({ trophy, tokenKey, onClick }: {
       onClick={onClick}
       style={{
         all: "unset",
+        boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
         cursor: "pointer",
@@ -219,6 +220,8 @@ function TrophyCard({ trophy, tokenKey, onClick }: {
         alignItems: "center",
         transition: "transform 0.15s, box-shadow 0.15s",
         width: "100%",
+        minHeight: 152,
+        justifyContent: "space-between",
       }}
       onMouseEnter={e => {
         (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
@@ -303,7 +306,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
         />
       )}
 
-      <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+      <main className="page-content">
         <button
           onClick={() => router.back()}
           style={{ background: "none", border: "none", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer", marginBottom: 20, padding: 0 }}

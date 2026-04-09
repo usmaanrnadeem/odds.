@@ -77,6 +77,7 @@ export const api = {
 
   // Positions
   position: (id: number) => req<{ yes: number; no: number }>(`/markets/${id}/position`),
+  allPositions: () => req<{ market_id: number; yes: number; no: number }[]>("/users/me/positions"),
 
   // Leaderboard + trophies
   leaderboard: () => req<LeaderboardEntry[]>("/leaderboard"),
