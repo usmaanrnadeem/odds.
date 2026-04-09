@@ -14,7 +14,14 @@ async def reset():
         password=os.getenv("DB_PASSWORD"), ssl="require",
     )
     h = pwd.hash(NEW_PASSWORD)
-    await conn.execute("UPDATE users SET password_hash=$1 WHERE username='admin'", h)
+    await conn.execute(
+        """
+        INSERT INTO users (username, password_hash, is_admin)
+        VALUES ('admin', $1, TRUE)
+        ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, is_admin = TRUE
+        """,
+        h,
+    )
     await conn.close()
     print(f"Password reset to: {NEW_PASSWORD}")
 
