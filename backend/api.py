@@ -50,10 +50,31 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_pool()
+    await _warm_market_cache()
     await start_bots()
     yield
     await stop_bots()
     await close_pool()
+
+
+async def _warm_market_cache() -> None:
+    """Pre-populate the in-memory market cache for all open markets.
+
+    Eliminates the lazy-load DB round trip on the very first trade after
+    each deploy.  Runs once at startup, costs 1 DB query total.
+    """
+    pool = get_pool()
+    rows = await pool.fetch(
+        "SELECT marketid, b, outstandingyes, outstandingno, status FROM markets WHERE status = 'open'"
+    )
+    for row in rows:
+        market_cache._cache[row["marketid"]] = {
+            "b":       float(row["b"]),
+            "yes_qty": float(row["outstandingyes"]),
+            "no_qty":  float(row["outstandingno"]),
+            "status":  row["status"],
+        }
+    logger.info("Market cache warmed: %d open markets", len(rows))
 
 
 # ── App ──────────────────────────────────────────────────────

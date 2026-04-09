@@ -24,6 +24,17 @@ async def init_pool() -> None:
         ssl="require",
         # Recycle idle connections before they go stale on Supabase's side
         max_inactive_connection_lifetime=300.0,
+        # Disable prepared statement cache.
+        # Supabase uses PgBouncer in transaction mode by default (port 6543).
+        # PgBouncer drops prepared statements between transactions, so asyncpg's
+        # default extended-query protocol causes a silent double-RTT:
+        #   1. Parse  →  ParseComplete  (1st network round trip)
+        #   2. Bind + Execute  →  result  (2nd network round trip)
+        # With statement_cache_size=0 asyncpg falls back to simple-query
+        # protocol which packs everything into 1 round trip.
+        # Safe on direct connections (port 5432) too — just slightly more
+        # bytes per query, irrelevant for this workload.
+        statement_cache_size=0,
     )
 
 
