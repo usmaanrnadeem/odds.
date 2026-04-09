@@ -12,6 +12,7 @@ import asyncpg
 
 from .db import get_pool
 from .lmsr import cost_buy, current_price
+from . import market_cache
 
 logger = logging.getLogger(__name__)
 
@@ -49,65 +50,78 @@ def _pick_side(bot: dict) -> bool:
 
 async def _do_bot_cycle(pool: asyncpg.Pool) -> None:
     """One tick: try to make one trade per bot on one random open market."""
-    async with pool.acquire() as conn:
-        # Fetch all open markets
-        markets = await conn.fetch(
-            "SELECT marketid, b, outstandingyes, outstandingno FROM markets WHERE status = 'open'"
-        )
-        if not markets:
-            return
+    # Fetch just IDs — market state comes from cache
+    rows = await pool.fetch("SELECT marketid FROM markets WHERE status = 'open'")
+    if not rows:
+        return
+    market_ids = [r["marketid"] for r in rows]
 
-        for bot in BOTS:
-            # Skip this bot stochastically
-            if random.random() > bot["weight"]:
+    for bot in BOTS:
+        if random.random() > bot["weight"]:
+            continue
+        if random.random() > BOT_TRADE_CHANCE:
+            continue
+
+        mid  = random.choice(market_ids)
+        lock = market_cache.get_lock(mid)
+
+        async with lock:
+            state = await market_cache.get_state(pool, mid)
+            if not state or state["status"] != "open":
                 continue
-            if random.random() > BOT_TRADE_CHANCE:
-                continue
 
-            market = random.choice(markets)
-            mid   = market["marketid"]
-            b     = float(market["b"])
-            yes_q = float(market["outstandingyes"])
-            no_q  = float(market["outstandingno"])
+            b     = state["b"]
+            yes_q = state["yes_qty"]
+            no_q  = state["no_qty"]
 
-            side = _pick_side(bot)
-            qty  = random.randint(BOT_MIN_QTY, BOT_MAX_QTY)
+            side       = _pick_side(bot)
+            qty        = random.randint(BOT_MIN_QTY, BOT_MAX_QTY)
             trade_cost = cost_buy(b, yes_q, no_q, qty, side)
 
-            # Compute new outstanding quantities
-            new_yes = yes_q + (qty if side else 0)
-            new_no  = no_q  + (qty if not side else 0)
-            new_prob = current_price(b, new_yes, new_no)
+            yes_delta = qty if side else 0
+            no_delta  = 0 if side else qty
+            new_yes   = yes_q + yes_delta
+            new_no    = no_q  + no_delta
+            new_prob  = current_price(b, new_yes, new_no)
 
-            async with conn.transaction():
-                await conn.execute(
+            # Single CTE: market delta-update + trade insert (1 round trip)
+            if side:
+                await pool.execute(
                     """
-                    UPDATE markets
-                       SET outstandingyes = $1,
-                           outstandingno  = $2
-                     WHERE marketid = $3
-                    """,
-                    new_yes, new_no, mid,
-                )
-                await conn.execute(
-                    """
+                    WITH mkt AS (
+                        UPDATE markets SET outstandingyes = outstandingyes + $1
+                        WHERE marketid = $2
+                    )
                     INSERT INTO trades (marketid, userid, side, quantity, cost, is_bot, bot_name)
-                    VALUES ($1, NULL, $2, $3, $4, TRUE, $5)
+                    VALUES ($2, NULL, TRUE, $1, $3, TRUE, $4)
                     """,
-                    mid, side, qty, trade_cost, bot["name"],
+                    qty, mid, trade_cost, bot["name"],
                 )
-                await conn.execute(
+            else:
+                await pool.execute(
                     """
-                    INSERT INTO market_prices (marketid, yes_prob, no_prob)
-                    VALUES ($1, $2, $3)
+                    WITH mkt AS (
+                        UPDATE markets SET outstandingno = outstandingno + $1
+                        WHERE marketid = $2
+                    )
+                    INSERT INTO trades (marketid, userid, side, quantity, cost, is_bot, bot_name)
+                    VALUES ($2, NULL, FALSE, $1, $3, TRUE, $4)
                     """,
-                    mid, new_prob, 1.0 - new_prob,
+                    qty, mid, trade_cost, bot["name"],
                 )
 
-            logger.debug(
-                "Bot %s traded %s×%d on market %d (cost=%.2f, new_prob=%.3f)",
-                bot["name"], "YES" if side else "NO", qty, mid, trade_cost, new_prob,
-            )
+            market_cache.apply_delta(mid, yes_delta, no_delta)
+
+        # Price snapshot outside lock — fire-and-forget
+        asyncio.create_task(pool.execute(
+            "INSERT INTO market_prices (marketid, yes_prob, no_prob) VALUES ($1, $2, $3)",
+            mid, new_prob, 1.0 - new_prob,
+        ))
+
+        logger.debug(
+            "Bot %s traded %s×%d on market %d (cost=%.2f, new_prob=%.3f)",
+            bot["name"], "YES" if side else "NO", qty, mid, trade_cost, new_prob,
+        )
 
 
 async def _bot_loop() -> None:

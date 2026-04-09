@@ -22,6 +22,8 @@ async def init_pool() -> None:
         min_size=5,
         max_size=10,
         ssl="require",
+        # Recycle idle connections before they go stale on Supabase's side
+        max_inactive_connection_lifetime=300.0,
     )
 
 

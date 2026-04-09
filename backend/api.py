@@ -22,6 +22,7 @@ from .auth import (
 )
 from .bots import start_bots, stop_bots
 from .db import close_pool, get_pool, init_pool
+from . import market_cache
 from .models import (
     BuyRequest,
     FeedEntry,
@@ -276,84 +277,99 @@ async def buy(
     current: Annotated[dict, Depends(get_current_user)],
 ):
     pool = get_pool()
-    async with pool.acquire() as con:
-        async with con.transaction():
-            # Round trip 1: lock market, read data needed for LMSR
-            market = await con.fetchrow(
-                "SELECT b, outstandingyes, outstandingno, status FROM markets WHERE marketID = $1 FOR UPDATE",
-                market_id,
-            )
-            if not market:
-                raise HTTPException(status_code=404, detail="Market not found")
-            if market["status"] != "open":
-                raise HTTPException(status_code=400, detail="Market is not open")
+    lock = market_cache.get_lock(market_id)
 
-            # Pure Python — no DB round trip
-            cost = lmsr.cost_buy(
-                float(market["b"]),
-                float(market["outstandingyes"]),
-                float(market["outstandingno"]),
-                body.quantity,
-                body.side,
-            )
+    async with lock:
+        # Cache hit = 0ms; cold start = 1 DB round trip then cached forever
+        state = await market_cache.get_state(pool, market_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="Market not found")
+        if state["status"] != "open":
+            raise HTTPException(status_code=400, detail="Market is not open")
 
-            # Round trip 2: atomic balance check + deduct (was 2 separate queries)
-            user = await con.fetchrow(
-                """UPDATE users SET points = points - $1
-                   WHERE userID = $2 AND points >= $1
-                   RETURNING points, username, token_key""",
-                cost, current["user_id"],
-            )
-            if not user:
-                raise HTTPException(status_code=400, detail="Insufficient balance")
+        b       = state["b"]
+        yes_qty = state["yes_qty"]
+        no_qty  = state["no_qty"]
 
-            # Round trip 3: position UPSERT + market outstanding update + trade insert
-            # Three writes, one round trip via CTE
-            if body.side:  # YES
-                trade_row = await con.fetchrow(
-                    """
-                    WITH pos AS (
-                        INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES ($1, $2, $3, 0)
-                        ON CONFLICT (userID, marketID) DO UPDATE SET yesPos = positions.yesPos + $3
-                    ),
-                    mkt AS (
-                        UPDATE markets SET outstandingYes = outstandingYes + $3 WHERE marketID = $2
-                    ),
-                    trd AS (
-                        INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
-                        VALUES ($2, $1, TRUE, $3, $4, FALSE)
-                        RETURNING tradeID
-                    )
-                    SELECT tradeID FROM trd
-                    """,
-                    current["user_id"], market_id, body.quantity, cost,
+        # Pure Python — 0ms
+        cost = lmsr.cost_buy(b, yes_qty, no_qty, body.quantity, body.side)
+
+        # ── Single CTE — 1 DB round trip ─────────────────────────────────────
+        # usr: atomically deduct cost; returns nothing if balance insufficient
+        # pos: UPSERT position — conditional on usr succeeding (SELECT FROM usr)
+        # mkt: delta-update outstanding — conditional on usr (EXISTS)
+        # trd: insert trade record — conditional on usr (SELECT FROM usr)
+        # If usr returns 0 rows, all other CTEs are no-ops; fetchrow returns None
+        if body.side:  # YES
+            row = await pool.fetchrow(
+                """
+                WITH usr AS (
+                    UPDATE users SET points = points - $1
+                    WHERE userID = $2 AND points >= $1
+                    RETURNING points, username, token_key
+                ),
+                pos AS (
+                    INSERT INTO positions (userID, marketID, yesPos, noPos)
+                    SELECT $2, $3, $4, 0 FROM usr
+                    ON CONFLICT (userID, marketID)
+                    DO UPDATE SET yesPos = positions.yesPos + EXCLUDED.yesPos
+                ),
+                mkt AS (
+                    UPDATE markets SET outstandingYes = outstandingYes + $4
+                    WHERE marketID = $3 AND EXISTS (SELECT 1 FROM usr)
+                ),
+                trd AS (
+                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
+                    SELECT $3, $2, TRUE, $4, $1, FALSE FROM usr
+                    RETURNING tradeID
                 )
-            else:  # NO
-                trade_row = await con.fetchrow(
-                    """
-                    WITH pos AS (
-                        INSERT INTO positions (userID, marketID, yesPos, noPos) VALUES ($1, $2, 0, $3)
-                        ON CONFLICT (userID, marketID) DO UPDATE SET noPos = positions.noPos + $3
-                    ),
-                    mkt AS (
-                        UPDATE markets SET outstandingNo = outstandingNo + $3 WHERE marketID = $2
-                    ),
-                    trd AS (
-                        INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
-                        VALUES ($2, $1, FALSE, $3, $4, FALSE)
-                        RETURNING tradeID
-                    )
-                    SELECT tradeID FROM trd
-                    """,
-                    current["user_id"], market_id, body.quantity, cost,
+                SELECT trd.tradeID, usr.points, usr.username, usr.token_key
+                FROM trd CROSS JOIN usr
+                """,
+                cost, current["user_id"], market_id, body.quantity,
+            )
+        else:  # NO
+            row = await pool.fetchrow(
+                """
+                WITH usr AS (
+                    UPDATE users SET points = points - $1
+                    WHERE userID = $2 AND points >= $1
+                    RETURNING points, username, token_key
+                ),
+                pos AS (
+                    INSERT INTO positions (userID, marketID, yesPos, noPos)
+                    SELECT $2, $3, 0, $4 FROM usr
+                    ON CONFLICT (userID, marketID)
+                    DO UPDATE SET noPos = positions.noPos + EXCLUDED.noPos
+                ),
+                mkt AS (
+                    UPDATE markets SET outstandingNo = outstandingNo + $4
+                    WHERE marketID = $3 AND EXISTS (SELECT 1 FROM usr)
+                ),
+                trd AS (
+                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
+                    SELECT $3, $2, FALSE, $4, $1, FALSE FROM usr
+                    RETURNING tradeID
                 )
+                SELECT trd.tradeID, usr.points, usr.username, usr.token_key
+                FROM trd CROSS JOIN usr
+                """,
+                cost, current["user_id"], market_id, body.quantity,
+            )
 
-            # Compute new probabilities from known state — no extra SELECT needed
-            new_yes_qty = float(market["outstandingyes"]) + (body.quantity if body.side else 0)
-            new_no_qty  = float(market["outstandingno"])  + (0 if body.side else body.quantity)
-            yes_prob = lmsr.current_price(float(market["b"]), new_yes_qty, new_no_qty)
-            no_prob  = 1 - yes_prob
-            new_balance = float(user["points"])  # RETURNING gives post-deduction value
+        if not row:
+            raise HTTPException(status_code=400, detail="Insufficient balance")
+
+        yes_delta  = body.quantity if body.side else 0
+        no_delta   = 0 if body.side else body.quantity
+        market_cache.apply_delta(market_id, yes_delta, no_delta)
+        new_yes_qty = yes_qty + yes_delta
+        new_no_qty  = no_qty  + no_delta
+
+    # Lock released — compute derived values from already-captured locals
+    yes_prob    = lmsr.current_price(b, new_yes_qty, new_no_qty)
+    no_prob     = 1 - yes_prob
+    new_balance = float(row["points"])
 
     # Price snapshot: fire-and-forget, does not block the response
     asyncio.create_task(
@@ -364,9 +380,9 @@ async def buy(
     )
 
     feed_entry = FeedEntry(
-        trade_id=trade_row["tradeid"],
-        username=user["username"],
-        token_key=user["token_key"],
+        trade_id=row["tradeid"],
+        username=row["username"],
+        token_key=row["token_key"],
         side=body.side,
         quantity=body.quantity,
         cost=cost,
@@ -384,7 +400,7 @@ async def buy(
     )
 
     return TradeOut(
-        trade_id=trade_row["tradeid"],
+        trade_id=row["tradeid"],
         market_id=market_id,
         side=body.side,
         quantity=body.quantity,
@@ -403,94 +419,95 @@ async def sell(
     current: Annotated[dict, Depends(get_current_user)],
 ):
     pool = get_pool()
-    async with pool.acquire() as con:
-        async with con.transaction():
-            # Round trip 1: lock market, read data needed for LMSR
-            market = await con.fetchrow(
-                "SELECT b, outstandingyes, outstandingno, status FROM markets WHERE marketID = $1 FOR UPDATE",
-                market_id,
+    lock = market_cache.get_lock(market_id)
+
+    async with lock:
+        state = await market_cache.get_state(pool, market_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="Market not found")
+        if state["status"] != "open":
+            raise HTTPException(status_code=400, detail="Market is not open")
+
+        b       = state["b"]
+        yes_qty = state["yes_qty"]
+        no_qty  = state["no_qty"]
+
+        payout = lmsr.cost_sell(b, yes_qty, no_qty, body.quantity, body.side)
+
+        # ── Single CTE — 1 DB round trip ─────────────────────────────────────
+        # pos: atomically deduct position; returns nothing if position insufficient
+        # usr: credit payout — conditional on pos succeeding (EXISTS)
+        # mkt: delta-update outstanding — conditional on pos (EXISTS)
+        # trd: insert trade record — conditional on pos (SELECT FROM pos)
+        # If pos returns 0 rows (insufficient), all other CTEs are no-ops
+        if body.side:  # YES
+            row = await pool.fetchrow(
+                """
+                WITH pos AS (
+                    UPDATE positions SET yesPos = yesPos - $1
+                    WHERE userID = $2 AND marketID = $3 AND yesPos >= $1
+                    RETURNING yesPos
+                ),
+                usr AS (
+                    UPDATE users SET points = points + $4
+                    WHERE userID = $2 AND EXISTS (SELECT 1 FROM pos)
+                    RETURNING points, username, token_key
+                ),
+                mkt AS (
+                    UPDATE markets SET outstandingYes = outstandingYes - $1
+                    WHERE marketID = $3 AND EXISTS (SELECT 1 FROM pos)
+                ),
+                trd AS (
+                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
+                    SELECT $3, $2, TRUE, $1, $4, FALSE FROM pos
+                    RETURNING tradeID
+                )
+                SELECT trd.tradeID, usr.points, usr.username, usr.token_key
+                FROM trd CROSS JOIN usr
+                """,
+                body.quantity, current["user_id"], market_id, payout,
             )
-            if not market:
-                raise HTTPException(status_code=404, detail="Market not found")
-            if market["status"] != "open":
-                raise HTTPException(status_code=400, detail="Market is not open")
-
-            # Pure Python — no DB round trip
-            payout = lmsr.cost_sell(
-                float(market["b"]),
-                float(market["outstandingyes"]),
-                float(market["outstandingno"]),
-                body.quantity,
-                body.side,
+        else:  # NO
+            row = await pool.fetchrow(
+                """
+                WITH pos AS (
+                    UPDATE positions SET noPos = noPos - $1
+                    WHERE userID = $2 AND marketID = $3 AND noPos >= $1
+                    RETURNING noPos
+                ),
+                usr AS (
+                    UPDATE users SET points = points + $4
+                    WHERE userID = $2 AND EXISTS (SELECT 1 FROM pos)
+                    RETURNING points, username, token_key
+                ),
+                mkt AS (
+                    UPDATE markets SET outstandingNo = outstandingNo - $1
+                    WHERE marketID = $3 AND EXISTS (SELECT 1 FROM pos)
+                ),
+                trd AS (
+                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
+                    SELECT $3, $2, FALSE, $1, $4, FALSE FROM pos
+                    RETURNING tradeID
+                )
+                SELECT trd.tradeID, usr.points, usr.username, usr.token_key
+                FROM trd CROSS JOIN usr
+                """,
+                body.quantity, current["user_id"], market_id, payout,
             )
 
-            # Round trip 2: atomic position check + deduct (was 2 separate queries)
-            if body.side:
-                pos = await con.fetchrow(
-                    """UPDATE positions SET yesPos = yesPos - $1
-                       WHERE userID = $2 AND marketID = $3 AND yesPos >= $1
-                       RETURNING yesPos""",
-                    body.quantity, current["user_id"], market_id,
-                )
-            else:
-                pos = await con.fetchrow(
-                    """UPDATE positions SET noPos = noPos - $1
-                       WHERE userID = $2 AND marketID = $3 AND noPos >= $1
-                       RETURNING noPos""",
-                    body.quantity, current["user_id"], market_id,
-                )
-            if not pos:
-                raise HTTPException(status_code=400, detail="No position or insufficient position")
+        if not row:
+            raise HTTPException(status_code=400, detail="No position or insufficient position")
 
-            # Round trip 3: user credit + market outstanding update + trade insert
-            # Three writes, one round trip via CTE
-            if body.side:  # YES
-                result = await con.fetchrow(
-                    """
-                    WITH usr AS (
-                        UPDATE users SET points = points + $1 WHERE userID = $2
-                        RETURNING points, username, token_key
-                    ),
-                    mkt AS (
-                        UPDATE markets SET outstandingYes = outstandingYes - $3 WHERE marketID = $4
-                    ),
-                    trd AS (
-                        INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
-                        VALUES ($4, $2, TRUE, $3, $1, FALSE)
-                        RETURNING tradeID
-                    )
-                    SELECT trd.tradeID, usr.points, usr.username, usr.token_key
-                    FROM trd CROSS JOIN usr
-                    """,
-                    payout, current["user_id"], body.quantity, market_id,
-                )
-            else:  # NO
-                result = await con.fetchrow(
-                    """
-                    WITH usr AS (
-                        UPDATE users SET points = points + $1 WHERE userID = $2
-                        RETURNING points, username, token_key
-                    ),
-                    mkt AS (
-                        UPDATE markets SET outstandingNo = outstandingNo - $3 WHERE marketID = $4
-                    ),
-                    trd AS (
-                        INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
-                        VALUES ($4, $2, FALSE, $3, $1, FALSE)
-                        RETURNING tradeID
-                    )
-                    SELECT trd.tradeID, usr.points, usr.username, usr.token_key
-                    FROM trd CROSS JOIN usr
-                    """,
-                    payout, current["user_id"], body.quantity, market_id,
-                )
+        yes_delta  = -(body.quantity if body.side else 0)
+        no_delta   = 0 if body.side else -body.quantity
+        market_cache.apply_delta(market_id, yes_delta, no_delta)
+        new_yes_qty = yes_qty + yes_delta
+        new_no_qty  = no_qty  + no_delta
 
-            # Compute new probabilities from known state — no extra SELECT needed
-            new_yes_qty = float(market["outstandingyes"]) - (body.quantity if body.side else 0)
-            new_no_qty  = float(market["outstandingno"])  - (0 if body.side else body.quantity)
-            yes_prob = lmsr.current_price(float(market["b"]), new_yes_qty, new_no_qty)
-            no_prob  = 1 - yes_prob
-            new_balance = float(result["points"])  # RETURNING gives post-credit value
+    # Lock released
+    yes_prob    = lmsr.current_price(b, new_yes_qty, new_no_qty)
+    no_prob     = 1 - yes_prob
+    new_balance = float(row["points"])
 
     # Price snapshot: fire-and-forget, does not block the response
     asyncio.create_task(
@@ -501,9 +518,9 @@ async def sell(
     )
 
     feed_entry = FeedEntry(
-        trade_id=result["tradeid"],
-        username=result["username"],
-        token_key=result["token_key"],
+        trade_id=row["tradeid"],
+        username=row["username"],
+        token_key=row["token_key"],
         side=body.side,
         quantity=body.quantity,
         cost=payout,
@@ -521,7 +538,7 @@ async def sell(
     )
 
     return TradeOut(
-        trade_id=result["tradeid"],
+        trade_id=row["tradeid"],
         market_id=market_id,
         side=body.side,
         quantity=body.quantity,
@@ -778,6 +795,9 @@ async def settle_market(
                 """,
                 body.side, market_id,
             )
+
+    # Invalidate cache — market is now settled, no more trades possible
+    market_cache.invalidate(market_id)
 
     # Broadcast settlement event
     winner = podium[0] if podium else None
