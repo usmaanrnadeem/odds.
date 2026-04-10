@@ -159,6 +159,18 @@ export default function HomePage() {
             {user.points.toFixed(0)}
           </span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>pts</span>
+          <button
+            onClick={() => setShowOnboarding(true)}
+            title="How to play"
+            style={{
+              marginLeft: "auto", background: "none", border: "none",
+              color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 14,
+              cursor: "pointer", padding: "4px 6px", lineHeight: 1,
+              opacity: 0.6,
+            }}
+          >
+            ⓘ
+          </button>
         </div>
 
         {fetching ? (

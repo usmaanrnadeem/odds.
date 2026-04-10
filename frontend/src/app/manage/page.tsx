@@ -35,7 +35,9 @@ export default function ManagePage() {
     if (user?.group_role !== "admin") return;
     api.markets().then(mkts => setMarkets(mkts.filter(m => m.status === "open")));
     api.groupMembers().then(setMembers);
-    api.myGroup().then(g => setJoinToken(g.join_token ?? null));
+    api.myGroup()
+      .then(g => setJoinToken(g.join_token ?? null))
+      .catch(err => setMsg(`invite link error: ${err instanceof ApiError ? err.message : String(err)}`));
   }, [user]);
 
   async function createMarket(e: React.FormEvent) {
