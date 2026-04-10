@@ -109,6 +109,17 @@ export const api = {
   leaderboard: () => req<LeaderboardEntry[]>("/leaderboard"),
   trophies: (userId: number) => req<Trophy[]>(`/users/${userId}/trophies`),
 
+  // Group
+  groupMembers: () => req<GroupMember[]>("/groups/members"),
+
+  // Chat
+  marketChat: (id: number) => req<ChatMessage[]>(`/markets/${id}/chat`),
+  sendMarketChat: (id: number, content: string) =>
+    req<ChatMessage>(`/markets/${id}/chat`, { method: "POST", body: JSON.stringify({ content }) }),
+  groupChat: () => req<ChatMessage[]>("/groups/me/chat"),
+  sendGroupChat: (content: string) =>
+    req<ChatMessage>("/groups/me/chat", { method: "POST", body: JSON.stringify({ content }) }),
+
   // Admin
   createMarket: (title: string, description: string | null, b: number, closes_at: string | null) =>
     req<Market>("/admin/markets", {
@@ -228,7 +239,42 @@ export type WSMarketCreatedEvent = {
   closes_at: string | null;
 };
 
-export type WSEvent = WSTradeEvent | WSSettlementEvent | WSMarketCreatedEvent;
+export type WSBalanceUpdateEvent = {
+  type: "balance_update";
+  user_id: number;
+  new_balance: number;
+};
+
+export type WSChatEvent = {
+  type: "chat";
+  scope: "market" | "group";
+  scope_id: number;
+  message_id: number;
+  user_id: number;
+  username: string;
+  token_key: string;
+  content: string;
+  created_at: string;
+};
+
+export type WSEvent = WSTradeEvent | WSSettlementEvent | WSMarketCreatedEvent | WSBalanceUpdateEvent | WSChatEvent;
+
+export type ChatMessage = {
+  message_id: number;
+  user_id: number;
+  username: string;
+  token_key: string;
+  content: string;
+  created_at: string;
+};
+
+export type GroupMember = {
+  user_id: number;
+  username: string;
+  token_key: string;
+  points: number;
+  role: "admin" | "member";
+};
 
 export function connectWS(onEvent: (e: WSEvent) => void): () => void {
   const url = BASE.replace(/^http/, "ws") + "/ws";

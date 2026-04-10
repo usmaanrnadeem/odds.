@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { api, Market, FeedEntry, WSEvent, connectWS, ApiError } from "@/lib/api";
+import { api, Market, FeedEntry, WSEvent, connectWS, ApiError, ChatMessage } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 import Token from "@/components/Token";
+import ChatPanel from "@/components/ChatPanel";
 import { TokenKey } from "@/lib/tokens";
 
 function Sparkline({ data }: { data: number[] }) {
@@ -51,6 +52,8 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
   const [tab,     setTab]     = useState<"buy" | "sell">("buy");
   const [flash,   setFlash]   = useState<string | null>(null);
   const [error,   setError]   = useState<string | null>(null);
+  const [chat,    setChat]    = useState<ChatMessage[]>([]);
+  const [section, setSection] = useState<"activity" | "chat">("activity");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -62,8 +65,22 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
     api.activity(marketId).then(setFeed);
     api.priceArc(marketId).then(setArc);
     api.position(marketId).then(setPosition).catch(() => {});
+    api.marketChat(marketId).then(setChat).catch(() => {});
 
     const disconnect = connectWS((event: WSEvent) => {
+      if (event.type === "chat" && event.scope === "market" && event.scope_id === marketId) {
+        setChat(prev => {
+          if (prev.some(m => m.message_id === event.message_id)) return prev;
+          return [...prev, {
+            message_id: event.message_id,
+            user_id: event.user_id,
+            username: event.username,
+            token_key: event.token_key,
+            content: event.content,
+            created_at: event.created_at,
+          }];
+        });
+      }
       if (event.type === "trade" && event.market_id === marketId) {
         setMarket(prev => prev ? {
           ...prev,
@@ -322,26 +339,62 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
 
-        {/* Activity feed */}
+        {/* Activity / Chat tabs */}
         <div style={{ marginTop: 32 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", marginBottom: 12 }}>ACTIVITY</p>
-          {feed.length === 0 && (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>no trades yet</p>
+          <div style={{ display: "flex", gap: 1, marginBottom: 16 }}>
+            {(["activity", "chat"] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setSection(t)}
+                style={{
+                  flex: 1, padding: "8px",
+                  background: section === t ? "var(--border)" : "transparent",
+                  border: "1px solid var(--border)",
+                  color: section === t ? "var(--text)" : "var(--muted)",
+                  fontFamily: "var(--font-mono)", fontSize: 11,
+                  fontWeight: section === t ? 700 : 400,
+                  letterSpacing: "0.08em", cursor: "pointer",
+                  textTransform: "uppercase",
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {section === "activity" && (
+            <>
+              {feed.length === 0 && (
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>no trades yet</p>
+              )}
+              {feed.map(entry => (
+                <div key={entry.trade_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                  <Token tokenKey={entry.token_key as TokenKey} size={24} />
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", flex: 1 }}>
+                    {entry.username}
+                  </span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)" }}>
+                    {entry.side ? "YES" : "NO"} ×{entry.quantity}
+                  </span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
+                    {entry.cost.toFixed(1)}
+                  </span>
+                </div>
+              ))}
+            </>
           )}
-          {feed.map(entry => (
-            <div key={entry.trade_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-              <Token tokenKey={entry.token_key as TokenKey} size={24} />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", flex: 1 }}>
-                {entry.username}
-              </span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)" }}>
-                {entry.side ? "YES" : "NO"} ×{entry.quantity}
-              </span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
-                {entry.cost.toFixed(1)}
-              </span>
+
+          {section === "chat" && (
+            <div style={{ height: 360 }}>
+              <ChatPanel
+                messages={chat}
+                currentUserId={user.user_id}
+                onSend={async (content) => {
+                  await api.sendMarketChat(marketId, content);
+                }}
+              />
             </div>
-          ))}
+          )}
         </div>
       </main>
     </>

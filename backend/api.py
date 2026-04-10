@@ -34,12 +34,16 @@ from .models import (
     LoginRequest,
     MarketCreate,
     MarketOut,
+    MessageIn,
+    MessageOut,
     RegisterRequest,
     SellRequest,
     SettleRequest,
     TrophyOut,
     TradeOut,
     UserOut,
+    WSBalanceUpdateEvent,
+    WSChatEvent,
     WSMarketCreatedEvent,
     WSSettlementEvent,
     WSTradeEvent,
@@ -355,6 +359,125 @@ async def join_group(body: GroupJoin, current: Annotated[dict, Depends(get_curre
     )
 
 
+@app.get("/groups/members")
+async def group_members(current: Annotated[dict, Depends(get_current_user)]):
+    """Return all members in the current user's group."""
+    group_id = current.get("group_id")
+    if not group_id:
+        return []
+    pool = get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT u.userid, u.username, u.token_key, u.points, gm.role
+        FROM users u
+        JOIN group_memberships gm ON gm.user_id = u.userid
+        WHERE gm.group_id = $1
+        ORDER BY u.username
+        """,
+        group_id,
+    )
+    return [
+        {
+            "user_id": r["userid"],
+            "username": r["username"],
+            "token_key": r["token_key"],
+            "points": float(r["points"]),
+            "role": r["role"],
+        }
+        for r in rows
+    ]
+
+
+# ── Chat routes ───────────────────────────────────────────────
+
+@app.get("/markets/{market_id}/chat", response_model=list[MessageOut])
+async def market_chat(market_id: int, current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    row = await _require_market(pool, market_id)
+    if not current["is_admin"] and row["group_id"] != current.get("group_id"):
+        raise HTTPException(status_code=404, detail="Market not found")
+    rows = await pool.fetch(
+        """
+        SELECT m.id, m.user_id, u.username, u.token_key, m.content, m.created_at
+        FROM messages m JOIN users u ON u.userid = m.user_id
+        WHERE m.market_id = $1
+        ORDER BY m.created_at ASC
+        LIMIT 100
+        """,
+        market_id,
+    )
+    return [MessageOut(message_id=r["id"], user_id=r["user_id"], username=r["username"],
+                       token_key=r["token_key"], content=r["content"],
+                       created_at=r["created_at"].isoformat()) for r in rows]
+
+
+@app.post("/markets/{market_id}/chat", response_model=MessageOut)
+async def send_market_chat(market_id: int, body: MessageIn, current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    row = await _require_market(pool, market_id)
+    if not current["is_admin"] and row["group_id"] != current.get("group_id"):
+        raise HTTPException(status_code=404, detail="Market not found")
+    user_row = await pool.fetchrow("SELECT username, token_key FROM users WHERE userid = $1", current["user_id"])
+    msg = await pool.fetchrow(
+        "INSERT INTO messages (market_id, user_id, content) VALUES ($1, $2, $3) RETURNING *",
+        market_id, current["user_id"], body.content,
+    )
+    out = MessageOut(message_id=msg["id"], user_id=current["user_id"],
+                     username=user_row["username"], token_key=user_row["token_key"],
+                     content=body.content, created_at=msg["created_at"].isoformat())
+    await manager.broadcast(
+        WSChatEvent(scope="market", scope_id=market_id, message_id=msg["id"],
+                    user_id=current["user_id"], username=user_row["username"],
+                    token_key=user_row["token_key"], content=body.content,
+                    created_at=msg["created_at"].isoformat()).model_dump()
+    )
+    return out
+
+
+@app.get("/groups/me/chat", response_model=list[MessageOut])
+async def group_chat_history(current: Annotated[dict, Depends(get_current_user)]):
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT m.id, m.user_id, u.username, u.token_key, m.content, m.created_at
+        FROM messages m JOIN users u ON u.userid = m.user_id
+        WHERE m.group_id = $1
+        ORDER BY m.created_at ASC
+        LIMIT 100
+        """,
+        group_id,
+    )
+    return [MessageOut(message_id=r["id"], user_id=r["user_id"], username=r["username"],
+                       token_key=r["token_key"], content=r["content"],
+                       created_at=r["created_at"].isoformat()) for r in rows]
+
+
+@app.post("/groups/me/chat", response_model=MessageOut)
+async def send_group_chat(body: MessageIn, current: Annotated[dict, Depends(get_current_user)]):
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    user_row = await pool.fetchrow("SELECT username, token_key FROM users WHERE userid = $1", current["user_id"])
+    msg = await pool.fetchrow(
+        "INSERT INTO messages (group_id, user_id, content) VALUES ($1, $2, $3) RETURNING *",
+        group_id, current["user_id"], body.content,
+    )
+    out = MessageOut(message_id=msg["id"], user_id=current["user_id"],
+                     username=user_row["username"], token_key=user_row["token_key"],
+                     content=body.content, created_at=msg["created_at"].isoformat())
+    await manager.broadcast(
+        WSChatEvent(scope="group", scope_id=group_id, message_id=msg["id"],
+                    user_id=current["user_id"], username=user_row["username"],
+                    token_key=user_row["token_key"], content=body.content,
+                    created_at=msg["created_at"].isoformat()).model_dump()
+    )
+    return out
+
+
 # ── Market routes ────────────────────────────────────────────
 
 @app.get("/markets", response_model=list[MarketOut])
@@ -578,6 +701,11 @@ async def buy(
             feed_entry=feed_entry,
         ).model_dump()
     )
+    asyncio.create_task(
+        manager.broadcast(
+            WSBalanceUpdateEvent(user_id=current["user_id"], new_balance=new_balance).model_dump()
+        )
+    )
 
     return TradeOut(
         trade_id=row["tradeid"],
@@ -722,6 +850,11 @@ async def sell(
             no_odds=lmsr.decimal_odds(no_prob),
             feed_entry=feed_entry,
         ).model_dump()
+    )
+    asyncio.create_task(
+        manager.broadcast(
+            WSBalanceUpdateEvent(user_id=current["user_id"], new_balance=new_balance).model_dump()
+        )
     )
 
     return TradeOut(

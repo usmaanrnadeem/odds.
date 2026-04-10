@@ -168,6 +168,37 @@ class WSMarketCreatedEvent(BaseModel):
     closes_at: Optional[str]
 
 
+class WSBalanceUpdateEvent(BaseModel):
+    type: Literal["balance_update"] = "balance_update"
+    user_id: int
+    new_balance: float
+
+
+class MessageOut(BaseModel):
+    message_id: int
+    user_id: int
+    username: str
+    token_key: str
+    content: str
+    created_at: str
+
+
+class MessageIn(BaseModel):
+    content: str = Field(..., min_length=1, max_length=280)
+
+
+class WSChatEvent(BaseModel):
+    type: Literal["chat"] = "chat"
+    scope: str    # "market" or "group"
+    scope_id: int
+    message_id: int
+    user_id: int
+    username: str
+    token_key: str
+    content: str
+    created_at: str
+
+
 class WSTradeEvent(BaseModel):
     type: Literal["trade"] = "trade"
     market_id: int

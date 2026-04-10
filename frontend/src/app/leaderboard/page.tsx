@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, LeaderboardEntry } from "@/lib/api";
+import { api, LeaderboardEntry, WSEvent, connectWS } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 import Token from "@/components/Token";
@@ -21,6 +21,25 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (!user) return;
     api.leaderboard().then(setEntries).finally(() => setFetching(false));
+
+    const disconnect = connectWS((event: WSEvent) => {
+      if (event.type === "balance_update") {
+        setEntries(prev => {
+          const updated = prev.map(e =>
+            e.user_id === event.user_id ? { ...e, points: event.new_balance } : e
+          );
+          // Re-sort and re-rank
+          return updated
+            .sort((a, b) => b.points - a.points)
+            .map((e, i) => ({ ...e, rank: i + 1 }));
+        });
+      }
+      if (event.type === "settlement") {
+        // Settlement changes wins/accuracy — re-fetch to get accurate stats
+        api.leaderboard().then(setEntries);
+      }
+    });
+    return disconnect;
   }, [user]);
 
   if (loading || !user) return null;
