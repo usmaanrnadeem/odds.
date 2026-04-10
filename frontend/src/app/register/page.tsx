@@ -26,6 +26,8 @@ function RegisterPageInner() {
     try {
       const u = await api.register(username, password, tokenKey);
       if (u.access_token) tokenStore.set(u.access_token);
+      // Clear so onboarding always shows for a fresh registration
+      localStorage.removeItem("onboarding_v1_seen");
       await refresh();
       router.push(token ? `/join?token=${token}` : "/join");
     } catch (err) {
