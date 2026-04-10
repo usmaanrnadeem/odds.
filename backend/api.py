@@ -277,12 +277,16 @@ async def logout(response: Response):
 async def me(current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
     row = await pool.fetchrow(_USER_GROUP_SQL, current["user_id"])
+    # Always mint a fresh token from DB state so stale JWTs self-heal on next refresh().
+    # This fixes the case where a user has a token from before they joined a group.
+    fresh_token = create_token(row["userid"], row["is_admin"], row["group_id"], row["group_role"])
     return UserOut(
         user_id=row["userid"],
         username=row["username"],
         points=float(row["points"]),
         is_admin=row["is_admin"],
         token_key=row["token_key"],
+        access_token=fresh_token,
         group_id=row["group_id"],
         group_name=row["group_name"],
         group_role=row["group_role"],
