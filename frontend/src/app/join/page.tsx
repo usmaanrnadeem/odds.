@@ -164,7 +164,7 @@ export default function JoinPage() {
           border: 1px solid var(--border);
           color: var(--text);
           font-family: var(--font-mono);
-          font-size: 14px;
+          font-size: 16px;
           outline: none;
           transition: border-color 0.15s;
           box-sizing: border-box;
@@ -176,7 +176,7 @@ export default function JoinPage() {
           background: var(--accent);
           color: #000;
           font-family: var(--font-mono);
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 700;
           letter-spacing: 0.05em;
           text-transform: uppercase;

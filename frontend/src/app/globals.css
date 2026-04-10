@@ -70,3 +70,17 @@ html, body {
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
+
+/* ── Mobile touch polish ────────────────────────────────── */
+/* Remove 300ms tap delay and blue flash on all interactive elements */
+button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+/* iOS Safari zooms in when an input's font-size < 16px — prevent that */
+@media (max-width: 639px) {
+  input, textarea, select { font-size: 16px !important; }
+
+  /* Nav: hide username text and trophies link — token icon still links to profile */
+  .nav-username { display: none !important; }
+  .nav-trophies { display: none !important; }
+  .nav-links    { gap: 16px !important; }
+}

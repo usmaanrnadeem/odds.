@@ -40,7 +40,7 @@ export default function Nav() {
         </Link>
 
         {/* Links */}
-        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+        <div className="nav-links" style={{ display: "flex", gap: 20, alignItems: "center" }}>
           {STATIC_LINKS.map(l => (
             <Link
               key={l.href}
@@ -50,19 +50,22 @@ export default function Nav() {
                 fontSize: 13,
                 color: pathname === l.href ? "var(--text)" : "var(--muted)",
                 textDecoration: "none",
+                padding: "8px 2px",  /* generous tap target */
               }}
             >
               {l.label}
             </Link>
           ))}
-          {/* Trophies — explicit link so it's always visible */}
+          {/* Trophies — hidden on mobile (token icon on right already links there) */}
           <Link
             href={`/profile/${user.user_id}`}
+            className="nav-trophies"
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: 13,
               color: pathname.startsWith("/profile") ? "var(--text)" : "var(--muted)",
               textDecoration: "none",
+              padding: "8px 2px",
             }}
           >
             trophies
@@ -75,6 +78,7 @@ export default function Nav() {
                 fontSize: 13,
                 color: pathname === "/manage" ? "var(--text)" : "var(--muted)",
                 textDecoration: "none",
+                padding: "8px 2px",
               }}
             >
               manage
@@ -88,6 +92,7 @@ export default function Nav() {
                 fontSize: 13,
                 color: pathname === "/admin" ? "var(--text)" : "var(--muted)",
                 textDecoration: "none",
+                padding: "8px 2px",
               }}
             >
               admin
@@ -96,14 +101,14 @@ export default function Nav() {
         </div>
 
         {/* User — token links to profile, sign out is separate */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Link
             href={`/profile/${user.user_id}`}
             title="my trophies"
             style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none" }}
           >
             <Token tokenKey={user.token_key as TokenKey} size={28} />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
+            <span className="nav-username" style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
               {user.username}
             </span>
           </Link>
@@ -115,10 +120,16 @@ export default function Nav() {
               border: "none",
               cursor: "pointer",
               fontFamily: "var(--font-mono)",
-              fontSize: 11,
+              fontSize: 14,
               color: "var(--border)",
-              padding: "2px 4px",
+              /* 44×44 tap target */
+              padding: "10px 8px",
               lineHeight: 1,
+              minWidth: 44,
+              minHeight: 44,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--muted)")}
             onMouseLeave={e => (e.currentTarget.style.color = "var(--border)")}

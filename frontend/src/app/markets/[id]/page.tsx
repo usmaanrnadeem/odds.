@@ -214,11 +214,11 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
               <button
                 onClick={() => setSide(true)}
                 style={{
-                  flex: 1, padding: "12px",
+                  flex: 1, padding: "16px 12px",
                   background: side ? "var(--accent)" : "transparent",
                   border: `1px solid ${side ? "var(--accent)" : "var(--border)"}`,
                   color: side ? "#000" : "var(--accent)",
-                  fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+                  fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
                   cursor: "pointer",
                 }}
               >
@@ -227,11 +227,11 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
               <button
                 onClick={() => setSide(false)}
                 style={{
-                  flex: 1, padding: "12px",
+                  flex: 1, padding: "16px 12px",
                   background: !side ? "var(--no)" : "transparent",
                   border: `1px solid ${!side ? "var(--no)" : "var(--border)"}`,
                   color: !side ? "#fff" : "var(--no)",
-                  fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+                  fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
                   cursor: "pointer",
                 }}
               >
@@ -268,7 +268,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
               onClick={trade}
               disabled={busy}
               style={{
-                width: "100%", padding: "13px",
+                width: "100%", padding: "16px",
                 background: side ? "var(--accent)" : "var(--no)",
                 border: "none",
                 color: side ? "#000" : "#fff",
@@ -349,11 +349,12 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 }
 
 const qBtnStyle: React.CSSProperties = {
-  width: 40, height: 40,
+  width: 48, height: 48,
   background: "var(--canvas)",
   border: "1px solid var(--border)",
   color: "var(--text)",
   fontFamily: "var(--font-mono)",
-  fontSize: 16,
+  fontSize: 18,
   cursor: "pointer",
+  flexShrink: 0,
 };
