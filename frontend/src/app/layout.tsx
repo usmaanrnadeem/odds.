@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth";
 import SettlementPopup from "@/components/SettlementPopup";
+import ToastNotifications from "@/components/ToastNotifications";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           {children}
           <SettlementPopup />
+          <ToastNotifications />
         </AuthProvider>
       </body>
     </html>

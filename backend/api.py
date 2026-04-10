@@ -40,6 +40,7 @@ from .models import (
     TrophyOut,
     TradeOut,
     UserOut,
+    WSMarketCreatedEvent,
     WSSettlementEvent,
     WSTradeEvent,
 )
@@ -863,6 +864,13 @@ async def create_market(
     row = await pool.fetchrow(
         "INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at) VALUES ($1, $2, $3, 'open', $4, $5, $6) RETURNING *",
         body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt,
+    )
+    await manager.broadcast(
+        WSMarketCreatedEvent(
+            market_id=row["marketid"],
+            title=row["title"],
+            closes_at=row["closes_at"].isoformat() if row["closes_at"] else None,
+        ).model_dump()
     )
     return _market_out(row)
 

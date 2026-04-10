@@ -221,7 +221,14 @@ export type WSSettlementEvent = {
   price_arc: number[];
 };
 
-export type WSEvent = WSTradeEvent | WSSettlementEvent;
+export type WSMarketCreatedEvent = {
+  type: "market_created";
+  market_id: number;
+  title: string;
+  closes_at: string | null;
+};
+
+export type WSEvent = WSTradeEvent | WSSettlementEvent | WSMarketCreatedEvent;
 
 export function connectWS(onEvent: (e: WSEvent) => void): () => void {
   const url = BASE.replace(/^http/, "ws") + "/ws";

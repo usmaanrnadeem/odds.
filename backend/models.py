@@ -161,6 +161,13 @@ class InviteOut(BaseModel):
 
 # ── WebSocket broadcast payloads ────────────────────────────
 
+class WSMarketCreatedEvent(BaseModel):
+    type: Literal["market_created"] = "market_created"
+    market_id: int
+    title: str
+    closes_at: Optional[str]
+
+
 class WSTradeEvent(BaseModel):
     type: Literal["trade"] = "trade"
     market_id: int
