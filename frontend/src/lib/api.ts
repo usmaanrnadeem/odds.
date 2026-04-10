@@ -84,6 +84,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name, password }),
     }),
+  joinGroupByToken: (join_token: string) =>
+    req<Group>("/groups/join", {
+      method: "POST",
+      body: JSON.stringify({ join_token }),
+    }),
+  previewGroup: (join_token: string) =>
+    req<{ group_id: number; group_name: string }>(`/groups/preview/${join_token}`),
+  myGroup: () =>
+    req<{ group_id: number; name: string; join_token?: string }>("/groups/me"),
+  regenerateJoinToken: () =>
+    req<{ join_token: string }>("/groups/me/regenerate-join-token", { method: "POST" }),
 
   // Markets
   markets: () => req<Market[]>("/markets"),

@@ -24,6 +24,9 @@ export default function ManagePage() {
   const [topupId,    setTopupId]    = useState<number | null>(null);
   const [topupAmt,   setTopupAmt]   = useState(100);
 
+  const [joinToken,  setJoinToken]  = useState<string | null>(null);
+  const [copied,     setCopied]     = useState(false);
+
   useEffect(() => {
     if (!loading && (!user || user.group_role !== "admin")) router.replace("/");
   }, [user, loading, router]);
@@ -32,6 +35,7 @@ export default function ManagePage() {
     if (user?.group_role !== "admin") return;
     api.markets().then(mkts => setMarkets(mkts.filter(m => m.status === "open")));
     api.groupMembers().then(setMembers);
+    api.myGroup().then(g => setJoinToken(g.join_token ?? null));
   }, [user]);
 
   async function createMarket(e: React.FormEvent) {
@@ -105,6 +109,45 @@ export default function ManagePage() {
             {msg}
           </div>
         )}
+
+        {/* Invite link */}
+        <section style={{ marginBottom: 32 }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>INVITE LINK</p>
+          {joinToken && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{
+                padding: "10px 12px",
+                background: "var(--surface)", border: "1px solid var(--border)",
+                fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)",
+                wordBreak: "break-all", lineHeight: 1.6,
+              }}>
+                {typeof window !== "undefined" ? `${window.location.origin}/join?token=${joinToken}` : `…/join?token=${joinToken}`}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/join?token=${joinToken}`;
+                    navigator.clipboard.writeText(url);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  style={{ ...primaryBtnStyle, flex: 1 }}
+                >
+                  {copied ? "copied ✓" : "copy link"}
+                </button>
+                <button
+                  onClick={async () => {
+                    const r = await api.regenerateJoinToken();
+                    setJoinToken(r.join_token);
+                  }}
+                  style={{ padding: "10px 14px", background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer" }}
+                >
+                  regenerate
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Create market */}
         <section style={{ marginBottom: 32 }}>

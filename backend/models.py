@@ -25,8 +25,10 @@ class GroupCreate(BaseModel):
 
 
 class GroupJoin(BaseModel):
-    name: str
-    password: str
+    # Either name+password (manual join) OR join_token (link join)
+    name: Optional[str] = None
+    password: Optional[str] = None
+    join_token: Optional[str] = None
 
 
 class GroupOut(BaseModel):
@@ -35,6 +37,7 @@ class GroupOut(BaseModel):
     role: str        # 'admin' | 'member'
     created_at: str
     access_token: str  # new JWT with group_id embedded — client must store this
+    join_token: Optional[str] = None  # returned to group creator only
 
 
 class LoginRequest(BaseModel):

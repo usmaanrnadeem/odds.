@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const token        = searchParams.get("token");
   const { user, loading, refresh } = useUser();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +28,7 @@ export default function LoginPage() {
       const u = await api.login(username, password);
       if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
-      router.push("/");
+      router.push(token ? `/join?token=${token}` : "/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {

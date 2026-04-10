@@ -309,9 +309,10 @@ async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_c
             raise HTTPException(status_code=409, detail="Group name already taken")
 
         async with con.transaction():
+            join_tok = secrets.token_urlsafe(16)
             group = await con.fetchrow(
-                "INSERT INTO groups (name, password_hash, created_by) VALUES ($1, $2, $3) RETURNING *",
-                body.name, hash_password(body.password), current["user_id"],
+                "INSERT INTO groups (name, password_hash, created_by, join_token) VALUES ($1, $2, $3, $4) RETURNING *",
+                body.name, hash_password(body.password), current["user_id"], join_tok,
             )
             await con.execute(
                 "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'admin')",
@@ -329,20 +330,28 @@ async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_c
         role="admin",
         created_at=group["created_at"].isoformat(),
         access_token=token,
+        join_token=group["join_token"],
     )
 
 
 @app.post("/groups/join", response_model=GroupOut)
 async def join_group(body: GroupJoin, current: Annotated[dict, Depends(get_current_user)]):
-    """Join an existing universe by name + password. No invite required."""
+    """Join via name+password OR a shareable join_token link."""
     pool = get_pool()
     async with pool.acquire() as con:
         if await con.fetchrow("SELECT 1 FROM group_memberships WHERE user_id = $1", current["user_id"]):
             raise HTTPException(status_code=400, detail="You are already in a group")
 
-        group = await con.fetchrow("SELECT * FROM groups WHERE name = $1", body.name)
-        if not group or not verify_password(body.password, group["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid group name or password")
+        if body.join_token:
+            group = await con.fetchrow("SELECT * FROM groups WHERE join_token = $1", body.join_token)
+            if not group:
+                raise HTTPException(status_code=400, detail="Invalid or expired invite link")
+        elif body.name and body.password:
+            group = await con.fetchrow("SELECT * FROM groups WHERE name = $1", body.name)
+            if not group or not verify_password(body.password, group["password_hash"]):
+                raise HTTPException(status_code=401, detail="Invalid group name or password")
+        else:
+            raise HTTPException(status_code=400, detail="Provide either join_token or name+password")
 
         await con.execute(
             "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'member')",
@@ -357,6 +366,44 @@ async def join_group(body: GroupJoin, current: Annotated[dict, Depends(get_curre
         created_at=group["created_at"].isoformat(),
         access_token=token,
     )
+
+
+@app.get("/groups/preview/{join_token}")
+async def preview_group(join_token: str):
+    """Public endpoint — returns group name for a join token (no auth needed)."""
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT group_id, name FROM groups WHERE join_token = $1", join_token)
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid invite link")
+    return {"group_id": row["group_id"], "group_name": row["name"]}
+
+
+@app.post("/groups/me/regenerate-join-token")
+async def regenerate_join_token(current: Annotated[dict, Depends(get_current_user)]):
+    """Group admin only — rotate the join token (invalidates the old link)."""
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    pool = get_pool()
+    new_tok = secrets.token_urlsafe(16)
+    await pool.execute(
+        "UPDATE groups SET join_token = $1 WHERE group_id = $2",
+        new_tok, current["group_id"],
+    )
+    return {"join_token": new_tok}
+
+
+@app.get("/groups/me")
+async def my_group(current: Annotated[dict, Depends(get_current_user)]):
+    """Return current group info including join_token (admin only sees token)."""
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM groups WHERE group_id = $1", group_id)
+    result = {"group_id": row["group_id"], "name": row["name"]}
+    if current.get("group_role") == "admin":
+        result["join_token"] = row["join_token"]
+    return result
 
 
 @app.get("/groups/members")

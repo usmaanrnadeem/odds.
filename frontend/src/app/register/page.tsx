@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
@@ -8,7 +8,9 @@ import Token from "@/components/Token";
 import { TOKEN_KEYS, TOKEN_LABELS, TokenKey } from "@/lib/tokens";
 
 export default function RegisterPage() {
-  const router = useRouter();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const token        = searchParams.get("token");
   const { refresh } = useUser();
 
   const [username, setUsername] = useState("");
@@ -25,7 +27,7 @@ export default function RegisterPage() {
       const u = await api.register(username, password, tokenKey);
       if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
-      router.push("/join");
+      router.push(token ? `/join?token=${token}` : "/join");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
     } finally {
