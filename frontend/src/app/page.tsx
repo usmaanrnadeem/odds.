@@ -17,6 +17,7 @@ function OddsBar({ yesProb }: { yesProb: number }) {
 
 function MarketCard({ market, position }: { market: Market; position?: { yes: number; no: number } }) {
   const settled = market.status === "settled";
+  const isClosed = !settled && market.closes_at != null && new Date(market.closes_at) < new Date();
   const hasYes = (position?.yes ?? 0) > 0;
   const hasNo  = (position?.no  ?? 0) > 0;
   return (
@@ -34,12 +35,17 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
         onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: settled ? "var(--muted)" : "var(--accent)", letterSpacing: "0.1em" }}>
-            {settled ? "SETTLED" : "● LIVE"}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: settled ? "var(--muted)" : isClosed ? "var(--muted)" : "var(--accent)", letterSpacing: "0.1em" }}>
+            {settled ? "SETTLED" : isClosed ? "CLOSED" : "● LIVE"}
           </span>
           {settled && market.settled_side !== null && (
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
               {market.settled_side ? "YES" : "NO"} won
+            </span>
+          )}
+          {isClosed && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+              awaiting result
             </span>
           )}
         </div>

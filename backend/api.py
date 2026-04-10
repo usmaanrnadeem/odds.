@@ -48,6 +48,78 @@ from .ws import manager
 logger = logging.getLogger(__name__)
 
 
+# ── Auto-refund ───────────────────────────────────────────────
+
+async def _do_auto_refund(pool: asyncpg.Pool, market: asyncpg.Record) -> None:
+    """Refund all positions at the close-time probability, then mark settled."""
+    market_id = market["marketid"]
+    b = float(market["b"])
+    yes_qty = float(market["outstandingyes"])
+    no_qty  = float(market["outstandingno"])
+
+    # Best-effort: find the price snapshot closest to closes_at
+    price_row = await pool.fetchrow(
+        "SELECT yes_prob FROM market_prices WHERE marketID = $1 AND timestamp <= $2 ORDER BY timestamp DESC LIMIT 1",
+        market_id, market["closes_at"],
+    )
+    yes_prob = float(price_row["yes_prob"]) if price_row else lmsr.current_price(b, yes_qty, no_qty)
+    no_prob  = 1 - yes_prob
+
+    async with pool.acquire() as con:
+        async with con.transaction():
+            # Check nothing changed since we queried
+            current = await con.fetchrow(
+                "SELECT status FROM markets WHERE marketID = $1 FOR UPDATE", market_id
+            )
+            if not current or current["status"] != "open":
+                return  # already settled by admin
+
+            # Refund each user: yes_prob × yesPos + no_prob × noPos
+            positions = await con.fetch(
+                "SELECT userID, yesPos, noPos FROM positions WHERE marketID = $1", market_id
+            )
+            for pos in positions:
+                refund = yes_prob * float(pos["yespos"]) + no_prob * float(pos["nopos"])
+                if refund > 0:
+                    await con.execute(
+                        "UPDATE users SET points = points + $1 WHERE userID = $2",
+                        refund, pos["userid"],
+                    )
+
+            await con.execute("DELETE FROM positions WHERE marketID = $1", market_id)
+            await con.execute(
+                """
+                UPDATE markets SET status = 'settled', settled_at = NOW(),
+                    settled_side = NULL, outstandingYes = 0, outstandingNo = 0
+                WHERE marketID = $1
+                """,
+                market_id,
+            )
+
+    market_cache.invalidate(market_id)
+    logger.info("Auto-refunded market %d at close-time yes_prob=%.3f", market_id, yes_prob)
+
+
+async def _auto_refund_loop() -> None:
+    """Background loop: every hour, refund markets closed >7 days ago without settlement."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            pool = get_pool()
+            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+            rows = await pool.fetch(
+                "SELECT * FROM markets WHERE status = 'open' AND closes_at IS NOT NULL AND closes_at < $1",
+                cutoff,
+            )
+            for market in rows:
+                try:
+                    await _do_auto_refund(pool, market)
+                except Exception:
+                    logger.exception("Auto-refund failed for market %d", market["marketid"])
+        except Exception:
+            logger.exception("Auto-refund loop error")
+
+
 # ── Lifespan ─────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -55,6 +127,7 @@ async def lifespan(app: FastAPI):
     await init_pool()
     await _warm_market_cache()
     await start_bots()
+    asyncio.create_task(_auto_refund_loop())
     yield
     await stop_bots()
     await close_pool()
@@ -63,15 +136,16 @@ async def lifespan(app: FastAPI):
 async def _warm_market_cache() -> None:
     pool = get_pool()
     rows = await pool.fetch(
-        "SELECT marketid, b, outstandingyes, outstandingno, status, group_id FROM markets WHERE status = 'open'"
+        "SELECT marketid, b, outstandingyes, outstandingno, status, group_id, closes_at FROM markets WHERE status = 'open'"
     )
     for row in rows:
         market_cache._cache[row["marketid"]] = {
-            "b":        float(row["b"]),
-            "yes_qty":  float(row["outstandingyes"]),
-            "no_qty":   float(row["outstandingno"]),
-            "status":   row["status"],
-            "group_id": row["group_id"],
+            "b":         float(row["b"]),
+            "yes_qty":   float(row["outstandingyes"]),
+            "no_qty":    float(row["outstandingno"]),
+            "status":    row["status"],
+            "group_id":  row["group_id"],
+            "closes_at": row["closes_at"],
         }
     logger.info("Market cache warmed: %d open markets", len(rows))
 
@@ -121,6 +195,7 @@ def _market_out(row: asyncpg.Record) -> MarketOut:
         created_at=row["created_at"].isoformat(),
         settled_at=row["settled_at"].isoformat() if row["settled_at"] else None,
         settled_side=row["settled_side"],
+        closes_at=row["closes_at"].isoformat() if row["closes_at"] else None,
     )
 
 
@@ -384,6 +459,10 @@ async def buy(
         if state["status"] != "open":
             raise HTTPException(status_code=400, detail="Market is not open")
 
+        closes_at = state.get("closes_at")
+        if closes_at and closes_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Market is closed — awaiting settlement")
+
         if not current["is_admin"] and state.get("group_id") != current.get("group_id"):
             raise HTTPException(status_code=403, detail="Market not in your group")
 
@@ -527,6 +606,10 @@ async def sell(
             raise HTTPException(status_code=404, detail="Market not found")
         if state["status"] != "open":
             raise HTTPException(status_code=400, detail="Market is not open")
+
+        closes_at = state.get("closes_at")
+        if closes_at and closes_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Market is closed — awaiting settlement")
 
         if not current["is_admin"] and state.get("group_id") != current.get("group_id"):
             raise HTTPException(status_code=403, detail="Market not in your group")
@@ -766,10 +849,20 @@ async def create_market(
     if not current["is_admin"] and not group_id:
         raise HTTPException(status_code=400, detail="Not in a group")
 
+    # Parse closes_at if provided — frontend sends local ISO string, interpret as UTC
+    closes_at_dt: datetime | None = None
+    if body.closes_at:
+        try:
+            closes_at_dt = datetime.fromisoformat(body.closes_at.replace("Z", "+00:00"))
+            if closes_at_dt.tzinfo is None:
+                closes_at_dt = closes_at_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid closes_at format")
+
     pool = get_pool()
     row = await pool.fetchrow(
-        "INSERT INTO markets (title, description, b, status, created_by, group_id) VALUES ($1, $2, $3, 'open', $4, $5) RETURNING *",
-        body.title, body.description, body.b, current["user_id"], group_id,
+        "INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at) VALUES ($1, $2, $3, 'open', $4, $5, $6) RETURNING *",
+        body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt,
     )
     return _market_out(row)
 

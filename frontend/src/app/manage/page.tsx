@@ -9,11 +9,12 @@ export default function ManagePage() {
   const { user, loading } = useUser();
   const router = useRouter();
 
-  const [title,  setTitle]  = useState("");
-  const [desc,   setDesc]   = useState("");
-  const [b,      setB]      = useState(100);
-  const [busy,   setBusy]   = useState(false);
-  const [msg,    setMsg]    = useState("");
+  const [title,    setTitle]    = useState("");
+  const [desc,     setDesc]     = useState("");
+  const [b,        setB]        = useState(100);
+  const [closesAt, setClosesAt] = useState("");
+  const [busy,     setBusy]     = useState(false);
+  const [msg,      setMsg]      = useState("");
 
   const [markets,    setMarkets]    = useState<Market[]>([]);
   const [settleId,   setSettleId]   = useState<number | null>(null);
@@ -33,9 +34,11 @@ export default function ManagePage() {
     setBusy(true);
     setMsg("");
     try {
-      const m = await api.createMarket(title, desc || null, b);
+      // Convert local datetime-local value to UTC ISO string, or null
+      const closesAtUtc = closesAt ? new Date(closesAt).toISOString() : null;
+      const m = await api.createMarket(title, desc || null, b, closesAtUtc);
       setMsg(`Created: "${m.title}"`);
-      setTitle(""); setDesc("");
+      setTitle(""); setDesc(""); setClosesAt("");
       setMarkets(prev => [m, ...prev]);
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Failed");
@@ -107,6 +110,15 @@ export default function ManagePage() {
                 onChange={e => setB(Number(e.target.value))}
                 min={10} max={10000}
                 style={{ ...inputStyle, width: 80 }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>close time (optional):</label>
+              <input
+                type="datetime-local"
+                value={closesAt}
+                onChange={e => setClosesAt(e.target.value)}
+                style={{ ...inputStyle, colorScheme: "dark" }}
               />
             </div>
             <button type="submit" disabled={busy} style={primaryBtnStyle}>

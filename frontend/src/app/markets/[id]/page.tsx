@@ -117,7 +117,9 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
   if (loading || !user || !market) return null;
 
-  const isOpen = market.status === "open";
+  const isOpen   = market.status === "open";
+  const isClosed = isOpen && market.closes_at != null && new Date(market.closes_at) < new Date();
+  const canTrade = isOpen && !isClosed;
 
   return (
     <>
@@ -166,7 +168,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
         )}
 
         {/* Trade panel */}
-        {isOpen && (
+        {canTrade && (
           <div style={{ marginTop: 24, background: "var(--surface)", border: "1px solid var(--border)", padding: 16 }}>
             {/* Buy / Sell tabs */}
             <div style={{ display: "flex", marginBottom: 16, gap: 1 }}>
@@ -292,12 +294,17 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
 
-        {/* Settled banner */}
+        {/* Closed / settled banner */}
+        {isClosed && (
+          <div style={{ marginTop: 16, padding: 12, border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", textAlign: "center" }}>
+            CLOSED — awaiting result
+          </div>
+        )}
         {!isOpen && (
           <div style={{ marginTop: 16, padding: 12, border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", textAlign: "center" }}>
-            {market.status === "settled"
+            {market.settled_side !== null
               ? `settled — ${market.settled_side ? "YES" : "NO"} won`
-              : "market closed"}
+              : "refunded at close-time price"}
           </div>
         )}
 

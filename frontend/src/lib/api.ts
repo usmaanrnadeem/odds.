@@ -110,10 +110,10 @@ export const api = {
   trophies: (userId: number) => req<Trophy[]>(`/users/${userId}/trophies`),
 
   // Admin
-  createMarket: (title: string, description: string | null, b: number) =>
+  createMarket: (title: string, description: string | null, b: number, closes_at: string | null) =>
     req<Market>("/admin/markets", {
       method: "POST",
-      body: JSON.stringify({ title, description, b }),
+      body: JSON.stringify({ title, description, b, closes_at }),
     }),
   settleMarket: (id: number, side: boolean) =>
     req<SettleResult>(`/admin/markets/${id}/settle`, {
@@ -141,6 +141,7 @@ export type Market = {
   created_at: string;
   settled_at: string | null;
   settled_side: boolean | null;
+  closes_at: string | null;
 };
 
 export type FeedEntry = {
