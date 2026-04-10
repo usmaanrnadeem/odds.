@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, Market, WSEvent, connectWS } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
+import OnboardingModal, { hasSeenOnboarding } from "@/components/OnboardingModal";
 
 function fmtCloseTime(closesAt: string): string {
   const diff = new Date(closesAt).getTime() - Date.now();
@@ -99,14 +100,16 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
 export default function HomePage() {
   const { user, loading } = useUser();
   const router = useRouter();
-  const [markets,   setMarkets]   = useState<Market[]>([]);
-  const [positions, setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
-  const [fetching,  setFetching]  = useState(true);
+  const [markets,    setMarkets]   = useState<Market[]>([]);
+  const [positions,  setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
+  const [fetching,   setFetching]  = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
-    // Logged in but not in a group yet → must join or create one
     if (!loading && user && !user.group_id && !user.is_admin) router.replace("/join");
+    // Show onboarding once — first time a user with a group hits the home page
+    if (!loading && user?.group_id && !hasSeenOnboarding()) setShowOnboarding(true);
   }, [user, loading, router]);
 
   useEffect(() => {
@@ -144,6 +147,12 @@ export default function HomePage() {
   return (
     <>
       <Nav />
+      {showOnboarding && (
+        <OnboardingModal
+          startingPts={user.points}
+          onDone={() => setShowOnboarding(false)}
+        />
+      )}
       <main className="page-content">
         <div style={{ marginBottom: 24, display: "flex", alignItems: "baseline", gap: 8 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, color: "var(--text)" }}>
