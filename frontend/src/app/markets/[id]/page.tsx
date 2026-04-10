@@ -121,6 +121,15 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
   const isClosed = isOpen && market.closes_at != null && new Date(market.closes_at) < new Date();
   const canTrade = isOpen && !isClosed;
 
+  function fmtCloseTime(closesAt: string): string {
+    const diff = new Date(closesAt).getTime() - Date.now();
+    const mins = Math.round(diff / 60000);
+    if (mins < 60) return `closes in ${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `closes in ${hrs}h ${mins % 60}m`;
+    return `closes ${new Date(closesAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+  }
+
   return (
     <>
       <Nav />
@@ -151,6 +160,11 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           </span>
         </div>
         <OddsBar yesProb={market.yes_prob} />
+        {canTrade && market.closes_at && (
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: "8px 0 0", letterSpacing: "0.04em" }}>
+            {fmtCloseTime(market.closes_at)}
+          </p>
+        )}
 
         {/* Price chart */}
         {arc.length >= 2 && (

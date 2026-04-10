@@ -6,6 +6,15 @@ import { api, Market, WSEvent, connectWS } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 
+function fmtCloseTime(closesAt: string): string {
+  const diff = new Date(closesAt).getTime() - Date.now();
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `closes in ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `closes in ${hrs}h ${mins % 60}m`;
+  return `closes ${new Date(closesAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+}
+
 function OddsBar({ yesProb }: { yesProb: number }) {
   const yesPct = Math.round(yesProb * 100);
   return (
@@ -61,6 +70,12 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
           </span>
         </div>
         <OddsBar yesProb={market.yes_prob} />
+        {/* Close time — shown when live and a deadline exists */}
+        {!settled && !isClosed && market.closes_at && (
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", margin: "8px 0 0", letterSpacing: "0.04em" }}>
+            {fmtCloseTime(market.closes_at)}
+          </p>
+        )}
         {/* Position row — only show when user holds a position */}
         {(hasYes || hasNo) && (
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
