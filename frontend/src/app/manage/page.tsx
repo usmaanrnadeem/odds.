@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Market, ApiError } from "@/lib/api";
+import { api, Market, ApiError, GroupMember } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 
@@ -20,6 +20,10 @@ export default function ManagePage() {
   const [settleId,   setSettleId]   = useState<number | null>(null);
   const [settleSide, setSettleSide] = useState<boolean>(true);
 
+  const [members,    setMembers]    = useState<GroupMember[]>([]);
+  const [topupId,    setTopupId]    = useState<number | null>(null);
+  const [topupAmt,   setTopupAmt]   = useState(100);
+
   useEffect(() => {
     if (!loading && (!user || user.group_role !== "admin")) router.replace("/");
   }, [user, loading, router]);
@@ -27,6 +31,7 @@ export default function ManagePage() {
   useEffect(() => {
     if (user?.group_role !== "admin") return;
     api.markets().then(mkts => setMarkets(mkts.filter(m => m.status === "open")));
+    api.groupMembers().then(setMembers);
   }, [user]);
 
   async function createMarket(e: React.FormEvent) {
@@ -56,6 +61,23 @@ export default function ManagePage() {
       setMsg(`Settled! Winner: ${result.podium[0]?.username ?? "none"}`);
       setMarkets(prev => prev.filter(m => m.market_id !== settleId));
       setSettleId(null);
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function topup() {
+    if (topupId === null) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const result = await api.topupUser(topupId, topupAmt);
+      setMsg(`Added ${topupAmt} pts to ${result.username} (now ${result.new_balance.toFixed(0)} pts)`);
+      // Refresh member list so balances are current
+      api.groupMembers().then(setMembers);
+      setTopupId(null);
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Failed");
     } finally {
@@ -163,6 +185,45 @@ export default function ManagePage() {
               </button>
             </div>
           )}
+        </section>
+
+        {/* Top up points */}
+        <section style={{ marginTop: 32 }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>TOP UP POINTS</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <select
+              value={topupId ?? ""}
+              onChange={e => setTopupId(e.target.value ? parseInt(e.target.value) : null)}
+              style={{ ...inputStyle, appearance: "none" }}
+            >
+              <option value="">select player…</option>
+              {members.map(m => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.username} ({m.points.toFixed(0)} pts)
+                </option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[50, 100, 250, 500].map(amt => (
+                <button
+                  key={amt}
+                  onClick={() => setTopupAmt(amt)}
+                  style={{
+                    flex: 1, padding: "10px 4px",
+                    background: topupAmt === amt ? "var(--surface)" : "transparent",
+                    border: `1px solid ${topupAmt === amt ? "var(--text)" : "var(--border)"}`,
+                    color: topupAmt === amt ? "var(--text)" : "var(--muted)",
+                    fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer",
+                  }}
+                >
+                  +{amt}
+                </button>
+              ))}
+            </div>
+            <button onClick={topup} disabled={busy || topupId === null} style={primaryBtnStyle}>
+              {busy ? "…" : `give ${topupAmt} pts`}
+            </button>
+          </div>
         </section>
       </main>
     </>

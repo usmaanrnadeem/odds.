@@ -120,6 +120,12 @@ export const api = {
   sendGroupChat: (content: string) =>
     req<ChatMessage>("/groups/me/chat", { method: "POST", body: JSON.stringify({ content }) }),
 
+  topupUser: (userId: number, amount: number) =>
+    req<{ user_id: number; username: string; new_balance: number }>(
+      `/admin/users/${userId}/topup?amount=${amount}`,
+      { method: "POST" }
+    ),
+
   // Admin
   createMarket: (title: string, description: string | null, b: number, closes_at: string | null) =>
     req<Market>("/admin/markets", {

@@ -1200,6 +1200,40 @@ async def create_invite(current: Annotated[dict, Depends(get_current_user)]):
     return InviteOut(token=token, expires_at=expires.isoformat())
 
 
+# ── Points top-up ────────────────────────────────────────────
+
+@app.post("/admin/users/{target_user_id}/topup")
+async def topup_user(
+    target_user_id: int,
+    current: Annotated[dict, Depends(get_current_user)],
+    amount: float = 100.0,
+):
+    is_group_admin = current.get("group_role") == "admin"
+    if not current["is_admin"] and not is_group_admin:
+        raise HTTPException(status_code=403, detail="Group admin only")
+
+    if amount <= 0 or amount > 10000:
+        raise HTTPException(status_code=400, detail="Amount must be between 1 and 10000")
+
+    pool = get_pool()
+    # Group admins can only top up members of their own group
+    if not current["is_admin"]:
+        member = await pool.fetchrow(
+            "SELECT 1 FROM group_memberships WHERE user_id = $1 AND group_id = $2",
+            target_user_id, current["group_id"],
+        )
+        if not member:
+            raise HTTPException(status_code=403, detail="User not in your group")
+
+    row = await pool.fetchrow(
+        "UPDATE users SET points = points + $1 WHERE userid = $2 RETURNING userid, username, points",
+        amount, target_user_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user_id": row["userid"], "username": row["username"], "new_balance": float(row["points"])}
+
+
 # ── WebSocket ────────────────────────────────────────────────
 
 @app.websocket("/ws")
