@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 
 type Tab = "join" | "create";
 
-export default function JoinPage() {
+function JoinPageInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const { user, refresh } = useUser();
@@ -212,5 +212,13 @@ export default function JoinPage() {
         .auth-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
     </main>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense>
+      <JoinPageInner />
+    </Suspense>
   );
 }
