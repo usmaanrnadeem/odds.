@@ -103,6 +103,9 @@ export default function Nav() {
 
         {/* User — token links to profile, sign out is separate */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>
+            {user.points.toFixed(0)}
+          </span>
           <Link
             href={`/profile/${user.user_id}`}
             title="my trophies"
