@@ -7,9 +7,9 @@ import { TokenKey } from "@/lib/tokens";
 
 // static links — trophies href is filled in dynamically per-user
 const STATIC_LINKS = [
-  { href: "/",            label: "markets" },
-  { href: "/leaderboard", label: "board"   },
-  { href: "/chat",        label: "chat"    },
+  { href: "/",            label: "markets", className: "nav-markets" },
+  { href: "/leaderboard", label: "board",   className: ""            },
+  { href: "/chat",        label: "chat",    className: ""            },
 ];
 
 export default function Nav() {
@@ -46,6 +46,7 @@ export default function Nav() {
             <Link
               key={l.href}
               href={l.href}
+              className={l.className || undefined}
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: 13,

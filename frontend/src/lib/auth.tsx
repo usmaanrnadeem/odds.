@@ -23,11 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
+    if (!tokenStore.get()) {
+      setUser(null);
+      return;
+    }
     try {
       const u = await api.me();
       if (u.access_token) tokenStore.set(u.access_token);
       setUser(u);
     } catch {
+      tokenStore.clear(); // token was invalid/expired — clear it
       setUser(null);
     }
   }
