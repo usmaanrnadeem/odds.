@@ -11,7 +11,7 @@ export default function ManagePage() {
 
   const [title,    setTitle]    = useState("");
   const [desc,     setDesc]     = useState("");
-  const [b,        setB]        = useState(100);
+  const [b,        setB]        = useState(30);
   const [closesAt, setClosesAt] = useState("");
   const [busy,     setBusy]     = useState(false);
   const [msg,      setMsg]      = useState("");
