@@ -209,7 +209,7 @@ export const TOKEN_KEYS: TokenKey[] = [
   "wizard", "rocket", "fox", "knight", "shark", "bull", "ghost", "dragon",
 ];
 
-export const TOKEN_LABELS: Record<TokenKey, string> = {
+export const TOKEN_LABELS: Record<StandardTokenKey, string> = {
   wizard: "Wizard",
   rocket: "Rocket",
   fox:    "Fox",
