@@ -9,7 +9,6 @@ import { TokenKey } from "@/lib/tokens";
 const STATIC_LINKS = [
   { href: "/",            label: "markets" },
   { href: "/leaderboard", label: "board"   },
-  { href: "/group",       label: "group"   },
   { href: "/chat",        label: "chat"    },
 ];
 
