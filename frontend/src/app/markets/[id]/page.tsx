@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import { api, Market, FeedEntry, WSEvent, connectWS, ApiError, ChatMessage } from "@/lib/api";
 import { useUser } from "@/lib/auth";
@@ -8,30 +8,47 @@ import Token from "@/components/Token";
 import ChatPanel from "@/components/ChatPanel";
 import { TokenKey } from "@/lib/tokens";
 
-function Sparkline({ data }: { data: number[] }) {
-  if (data.length < 2) return null;
-  const w = 448, h = 56;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 0.01;
-  const pts = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * w;
-      const y = h - ((v - min) / range) * (h - 4) - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block", overflow: "visible" }} preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeLinejoin="round" />
-    </svg>
-  );
+// ── LMSR cost preview ─────────────────────────────────────────
+// Exact cost formula so the preview matches the backend exactly.
+function logSumExp(a: number, b: number): number {
+  const m = Math.max(a, b);
+  return m + Math.log(Math.exp(a - m) + Math.exp(b - m));
+}
+function lmsrCost(b: number, qYes: number, qNo: number, qty: number, buyYes: boolean): number {
+  const nY = buyYes ? qYes + qty : qYes;
+  const nN = buyYes ? qNo : qNo + qty;
+  return b * (logSumExp(nY / b, nN / b) - logSumExp(qYes / b, qNo / b));
+}
+function lmsrSellReturn(b: number, qYes: number, qNo: number, qty: number, sellYes: boolean): number {
+  // Selling is buying the other direction then negating — or just cost of removing shares
+  const nY = sellYes ? qYes - qty : qYes;
+  const nN = sellYes ? qNo : qNo - qty;
+  return b * (logSumExp(qYes / b, qNo / b) - logSumExp(nY / b, nN / b));
 }
 
-function OddsBar({ yesProb }: { yesProb: number }) {
+// ── Animated probability display ──────────────────────────────
+function ProbDisplay({ prob, side, flash }: { prob: number; side: "yes" | "no"; flash: boolean }) {
+  const pct = Math.round(prob * 100);
+  const color = side === "yes" ? "var(--accent)" : "var(--no)";
   return (
-    <div style={{ height: 4, background: "var(--border)", overflow: "hidden" }}>
-      <div style={{ height: "100%", width: `${Math.round(yesProb * 100)}%`, background: "var(--accent)", transition: "width 0.4s ease" }} />
+    <div style={{ textAlign: side === "yes" ? "left" : "right", flex: 1 }}>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 52,
+          fontWeight: 900,
+          color,
+          lineHeight: 1,
+          transition: "color 0.2s",
+          animation: flash ? "prob-flash 0.4s ease-out" : undefined,
+          display: "inline-block",
+        }}
+      >
+        {pct}%
+      </div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+        {side.toUpperCase()}
+      </div>
     </div>
   );
 }
@@ -44,16 +61,17 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
   const [market,   setMarket]   = useState<Market | null>(null);
   const [feed,     setFeed]     = useState<FeedEntry[]>([]);
-  const [arc,      setArc]      = useState<number[]>([]);
   const [position, setPosition] = useState<{ yes: number; no: number } | null>(null);
-  const [qty,      setQty]      = useState(1);
-  const [side,    setSide]    = useState<boolean>(true); // true=YES
-  const [busy,    setBusy]    = useState(false);
-  const [tab,     setTab]     = useState<"buy" | "sell">("buy");
-  const [flash,   setFlash]   = useState<string | null>(null);
-  const [error,   setError]   = useState<string | null>(null);
-  const [chat,    setChat]    = useState<ChatMessage[]>([]);
-  const [section, setSection] = useState<"activity" | "chat">("activity");
+  const [qtyStr,   setQtyStr]   = useState("1");
+  const [side,     setSide]     = useState<boolean>(true);
+  const [busy,     setBusy]     = useState(false);
+  const [tab,      setTab]      = useState<"buy" | "sell">("buy");
+  const [flash,    setFlash]    = useState<string | null>(null);
+  const [error,    setError]    = useState<string | null>(null);
+  const [chat,     setChat]     = useState<ChatMessage[]>([]);
+  const [section,  setSection]  = useState<"activity" | "chat">("activity");
+  const [probFlash, setProbFlash] = useState(false);
+  const prevProbRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -61,9 +79,8 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     if (!user) return;
-    api.market(marketId).then(setMarket);
+    api.market(marketId).then(m => { setMarket(m); prevProbRef.current = m.yes_prob; });
     api.activity(marketId).then(setFeed);
-    api.priceArc(marketId).then(setArc);
     api.position(marketId).then(setPosition).catch(() => {});
     api.marketChat(marketId).then(setChat).catch(() => {});
 
@@ -72,26 +89,23 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
         setChat(prev => {
           if (prev.some(m => m.message_id === event.message_id)) return prev;
           return [...prev, {
-            message_id: event.message_id,
-            user_id: event.user_id,
-            username: event.username,
-            token_key: event.token_key,
-            content: event.content,
-            created_at: event.created_at,
+            message_id: event.message_id, user_id: event.user_id,
+            username: event.username, token_key: event.token_key,
+            content: event.content, created_at: event.created_at,
           }];
         });
       }
       if (event.type === "trade" && event.market_id === marketId) {
-        setMarket(prev => prev ? {
-          ...prev,
-          yes_prob: event.yes_prob,
-          no_prob: event.no_prob,
-          yes_odds: event.yes_odds,
-          no_odds: event.no_odds,
-        } : prev);
-        setArc(prev => [...prev, event.yes_prob]);
-        // Deduplicate by trade_id — guards against the activity re-fetch
-        // race that happens when refresh() updates the user object reference.
+        setMarket(prev => {
+          if (!prev) return prev;
+          // Trigger flash if prob changed
+          if (prevProbRef.current !== null && prevProbRef.current !== event.yes_prob) {
+            setProbFlash(true);
+            setTimeout(() => setProbFlash(false), 400);
+          }
+          prevProbRef.current = event.yes_prob;
+          return { ...prev, yes_prob: event.yes_prob, no_prob: event.no_prob, yes_odds: event.yes_odds, no_odds: event.no_odds };
+        });
         setFeed(prev => {
           if (prev.some(e => e.trade_id === event.feed_entry.trade_id)) return prev;
           return [event.feed_entry, ...prev].slice(0, 50);
@@ -100,7 +114,9 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
     });
     return disconnect;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, marketId]); // user.user_id not user — avoids re-running when points change after refresh()
+  }, [user?.user_id, marketId]);
+
+  const qty = Math.max(1, parseInt(qtyStr) || 1);
 
   async function trade() {
     if (!market || !user) return;
@@ -111,11 +127,9 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
       const result = await fn(marketId, side, qty);
       setFlash(tab === "buy"
         ? `Bought ${qty} ${side ? "YES" : "NO"} for ${result.cost.toFixed(1)} pts`
-        : `Sold ${qty} ${side ? "YES" : "NO"} for ${result.cost.toFixed(1)} pts`
+        : `Sold ${qty} ${side ? "YES" : "NO"}, received ${result.cost.toFixed(1)} pts`
       );
-      // Update balance from trade response — no extra API round trip
       updatePoints(result.new_balance);
-      // Optimistically update position, then confirm from server in background
       setPosition(prev => {
         if (!prev) return prev;
         const delta = tab === "buy" ? qty : -qty;
@@ -124,6 +138,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           : { ...prev, no:  Math.max(0, prev.no  + delta) };
       });
       api.position(marketId).then(setPosition).catch(() => {});
+      setQtyStr("1");
       setTimeout(() => setFlash(null), 3000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Trade failed");
@@ -138,6 +153,22 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
   const isClosed = isOpen && market.closes_at != null && new Date(market.closes_at) < new Date();
   const canTrade = isOpen && !isClosed;
 
+  // Live cost preview using exact LMSR formula
+  const costPreview = (() => {
+    if (!market || qty < 1) return null;
+    try {
+      if (tab === "buy") {
+        const c = lmsrCost(market.b, market.outstanding_yes, market.outstanding_no, qty, side);
+        return { label: "costs", value: c };
+      } else {
+        const maxSell = side ? (position?.yes ?? 0) : (position?.no ?? 0);
+        if (qty > maxSell) return { label: "you only hold", value: null, warn: `${maxSell.toFixed(0)}` };
+        const r = lmsrSellReturn(market.b, market.outstanding_yes, market.outstanding_no, qty, side);
+        return { label: "returns", value: r };
+      }
+    } catch { return null; }
+  })();
+
   function fmtCloseTime(closesAt: string): string {
     const diff = new Date(closesAt).getTime() - Date.now();
     const mins = Math.round(diff / 60000);
@@ -150,6 +181,12 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
   return (
     <>
       <Nav />
+      <style>{`
+        @keyframes prob-flash {
+          0%   { transform: scale(1.08); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
       <main className="page-content">
         {/* Back */}
         <button
@@ -159,68 +196,55 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           ← markets
         </button>
 
-        {/* Market header */}
-        <h1 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, lineHeight: 1.4, color: "var(--text)" }}>
+        {/* Title */}
+        <h1 style={{ fontSize: 17, fontWeight: 600, marginBottom: 20, lineHeight: 1.4, color: "var(--text)" }}>
           {market.title}
         </h1>
 
-        {/* Odds */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
-            {market.yes_odds}×
+        {/* Big probability display */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+          <ProbDisplay prob={market.yes_prob} side="yes" flash={probFlash} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, paddingTop: 10 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", letterSpacing: "0.1em" }}>VS</span>
+          </div>
+          <ProbDisplay prob={market.no_prob} side="no" flash={probFlash} />
+        </div>
+
+        {/* Probability bar */}
+        <div style={{ height: 4, background: "var(--border)", overflow: "hidden", marginBottom: 6 }}>
+          <div style={{ height: "100%", width: `${Math.round(market.yes_prob * 100)}%`, background: "var(--accent)", transition: "width 0.4s ease" }} />
+        </div>
+
+        {/* Odds + close time */}
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+            YES {market.yes_odds}×
           </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)", alignSelf: "center" }}>
-            {Math.round(market.yes_prob * 100)}% YES
-          </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--no)" }}>
-            {market.no_odds}×
+          {canTrade && market.closes_at && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+              {fmtCloseTime(market.closes_at)}
+            </span>
+          )}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+            NO {market.no_odds}×
           </span>
         </div>
-        <OddsBar yesProb={market.yes_prob} />
-        {canTrade && market.closes_at && (
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: "8px 0 0", letterSpacing: "0.04em" }}>
-            {fmtCloseTime(market.closes_at)}
-          </p>
-        )}
-
-        {/* Price chart */}
-        {arc.length >= 2 && (
-          <div style={{ marginTop: 16, padding: "12px 0 4px" }}>
-            <Sparkline data={arc} />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted)", letterSpacing: "0.08em" }}>
-                PRICE HISTORY
-              </span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted)" }}>
-                {Math.round(arc[0] * 100)}% → {Math.round(arc[arc.length - 1] * 100)}%
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Trade panel */}
         {canTrade && (
-          <div style={{ marginTop: 24, background: "var(--surface)", border: "1px solid var(--border)", padding: 16 }}>
+          <div style={{ marginTop: 20, background: "var(--surface)", border: "1px solid var(--border)", padding: 16 }}>
             {/* Buy / Sell tabs */}
             <div style={{ display: "flex", marginBottom: 16, gap: 1 }}>
               {(["buy", "sell"] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    background: tab === t ? "var(--border)" : "transparent",
-                    border: "1px solid var(--border)",
-                    color: tab === t ? "var(--text)" : "var(--muted)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 12,
-                    fontWeight: tab === t ? 700 : 400,
-                    letterSpacing: "0.08em",
-                    cursor: "pointer",
-                    textTransform: "uppercase",
-                  }}
-                >
+                <button key={t} onClick={() => setTab(t)} style={{
+                  flex: 1, padding: "8px",
+                  background: tab === t ? "var(--border)" : "transparent",
+                  border: "1px solid var(--border)",
+                  color: tab === t ? "var(--text)" : "var(--muted)",
+                  fontFamily: "var(--font-mono)", fontSize: 12,
+                  fontWeight: tab === t ? 700 : 400,
+                  letterSpacing: "0.08em", cursor: "pointer", textTransform: "uppercase",
+                }}>
                   {t}
                 </button>
               ))}
@@ -228,54 +252,68 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
             {/* YES / NO */}
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <button
-                onClick={() => setSide(true)}
-                style={{
-                  flex: 1, padding: "16px 12px",
-                  background: side ? "var(--accent)" : "transparent",
-                  border: `1px solid ${side ? "var(--accent)" : "var(--border)"}`,
-                  color: side ? "#000" : "var(--accent)",
-                  fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={() => setSide(true)} style={{
+                flex: 1, padding: "16px 12px",
+                background: side ? "var(--accent)" : "transparent",
+                border: `1px solid ${side ? "var(--accent)" : "var(--border)"}`,
+                color: side ? "#000" : "var(--accent)",
+                fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>
                 YES {market.yes_odds}×
               </button>
-              <button
-                onClick={() => setSide(false)}
-                style={{
-                  flex: 1, padding: "16px 12px",
-                  background: !side ? "var(--no)" : "transparent",
-                  border: `1px solid ${!side ? "var(--no)" : "var(--border)"}`,
-                  color: !side ? "#fff" : "var(--no)",
-                  fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={() => setSide(false)} style={{
+                flex: 1, padding: "16px 12px",
+                background: !side ? "var(--no)" : "transparent",
+                border: `1px solid ${!side ? "var(--no)" : "var(--border)"}`,
+                color: !side ? "#fff" : "var(--no)",
+                fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>
                 NO {market.no_odds}×
               </button>
             </div>
 
             {/* Quantity */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} style={qBtnStyle}>−</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <button onClick={() => setQtyStr(q => String(Math.max(1, (parseInt(q) || 1) - 1)))} style={qBtnStyle}>−</button>
               <input
-                type="number"
-                value={qty}
-                min={1}
-                max={10000}
+                type="text"
+                inputMode="numeric"
+                value={qtyStr}
+                onFocus={e => e.target.select()}
                 onChange={e => {
-                  const v = parseInt(e.target.value);
-                  if (!isNaN(v) && v >= 1 && v <= 10000) setQty(v);
+                  const v = e.target.value.replace(/[^0-9]/g, "");
+                  setQtyStr(v === "" ? "" : String(Math.min(10000, parseInt(v) || 1)));
                 }}
+                onBlur={() => setQtyStr(q => String(Math.max(1, parseInt(q) || 1)))}
                 style={{
                   flex: 1, textAlign: "center",
                   fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700,
                   color: "var(--text)", background: "var(--canvas)",
                   border: "1px solid var(--border)", padding: "8px 4px",
+                  outline: "none",
                 }}
               />
-              <button onClick={() => setQty(q => Math.min(10000, q + 1))} style={qBtnStyle}>+</button>
+              <button onClick={() => setQtyStr(q => String(Math.min(10000, (parseInt(q) || 1) + 1)))} style={qBtnStyle}>+</button>
+            </div>
+
+            {/* Cost preview */}
+            <div style={{ marginBottom: 16, minHeight: 20, textAlign: "center" }}>
+              {costPreview && costPreview.warn && (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)" }}>
+                  you only hold {costPreview.warn} {side ? "YES" : "NO"}
+                </span>
+              )}
+              {costPreview && costPreview.value !== null && (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
+                  {costPreview.label}{" "}
+                  <span style={{ color: "var(--text)", fontWeight: 700 }}>
+                    {costPreview.value.toFixed(1)} pts
+                  </span>
+                  {tab === "buy" && user.points < costPreview.value && (
+                    <span style={{ color: "var(--no)", marginLeft: 8 }}>insufficient balance</span>
+                  )}
+                </span>
+              )}
             </div>
 
             {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", marginBottom: 8 }}>{error}</p>}
@@ -283,7 +321,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
             <button
               onClick={trade}
-              disabled={busy}
+              disabled={busy || (tab === "buy" && costPreview?.value !== null && costPreview?.value !== undefined && user.points < (costPreview.value ?? 0))}
               style={{
                 width: "100%", padding: "16px",
                 background: side ? "var(--accent)" : "var(--no)",
@@ -298,22 +336,21 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
               {busy ? "…" : `${tab} ${qty} ${side ? "YES" : "NO"}`}
             </button>
 
-            {/* Position summary */}
+            {/* Position */}
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-              {(["yes", "no"] as const).map(side => {
-                const val = position?.[side] ?? 0;
+              {(["yes", "no"] as const).map(s => {
+                const val = position?.[s] ?? 0;
                 const active = val > 0;
-                const col = side === "yes" ? "var(--accent)" : "var(--no)";
+                const col = s === "yes" ? "var(--accent)" : "var(--no)";
                 return (
-                  <div key={side} style={{
+                  <div key={s} style={{
                     flex: 1, padding: "8px 10px",
                     border: `1px solid ${active ? col : "var(--border)"}`,
                     background: active ? `color-mix(in srgb, ${col} 8%, transparent)` : "transparent",
                     display: "flex", justifyContent: "space-between", alignItems: "center",
-                    transition: "border-color 0.2s, background 0.2s",
                   }}>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", color: active ? col : "var(--muted)" }}>
-                      {side.toUpperCase()}
+                      {s.toUpperCase()}
                     </span>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: active ? col : "var(--muted)" }}>
                       {position ? (active ? val.toFixed(1) : "—") : "—"}
@@ -325,7 +362,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
 
-        {/* Closed / settled banner */}
+        {/* Closed / settled banners */}
         {isClosed && (
           <div style={{ marginTop: 16, padding: 12, border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", textAlign: "center" }}>
             CLOSED — awaiting result
@@ -339,24 +376,19 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
 
-        {/* Activity / Chat tabs */}
+        {/* Activity / Chat */}
         <div style={{ marginTop: 32 }}>
           <div style={{ display: "flex", gap: 1, marginBottom: 16 }}>
             {(["activity", "chat"] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setSection(t)}
-                style={{
-                  flex: 1, padding: "8px",
-                  background: section === t ? "var(--border)" : "transparent",
-                  border: "1px solid var(--border)",
-                  color: section === t ? "var(--text)" : "var(--muted)",
-                  fontFamily: "var(--font-mono)", fontSize: 11,
-                  fontWeight: section === t ? 700 : 400,
-                  letterSpacing: "0.08em", cursor: "pointer",
-                  textTransform: "uppercase",
-                }}
-              >
+              <button key={t} onClick={() => setSection(t)} style={{
+                flex: 1, padding: "8px",
+                background: section === t ? "var(--border)" : "transparent",
+                border: "1px solid var(--border)",
+                color: section === t ? "var(--text)" : "var(--muted)",
+                fontFamily: "var(--font-mono)", fontSize: 11,
+                fontWeight: section === t ? 700 : 400,
+                letterSpacing: "0.08em", cursor: "pointer", textTransform: "uppercase",
+              }}>
                 {t}
               </button>
             ))}
@@ -389,9 +421,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
               <ChatPanel
                 messages={chat}
                 currentUserId={user.user_id}
-                onSend={async (content) => {
-                  await api.sendMarketChat(marketId, content);
-                }}
+                onSend={async (content) => { await api.sendMarketChat(marketId, content); }}
               />
             </div>
           )}
