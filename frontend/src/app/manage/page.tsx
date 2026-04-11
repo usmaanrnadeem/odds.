@@ -203,7 +203,7 @@ export default function ManagePage() {
                 ))}
               </select>
             </div>
-            <button type="submit" disabled={busy} style={primaryBtnStyle}>
+            <button type="submit" disabled={busy} style={{ ...primaryBtnStyle, opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>
               {busy ? "…" : "create market"}
             </button>
           </form>
@@ -240,7 +240,7 @@ export default function ManagePage() {
                   NO wins
                 </button>
               </div>
-              <button onClick={settle} disabled={busy || settleId === null} style={primaryBtnStyle}>
+              <button onClick={settle} disabled={busy || settleId === null} style={{ ...primaryBtnStyle, opacity: (busy || settleId === null) ? 0.4 : 1, cursor: (busy || settleId === null) ? "not-allowed" : "pointer" }}>
                 {busy ? "…" : "settle"}
               </button>
             </div>
@@ -280,7 +280,7 @@ export default function ManagePage() {
                 </button>
               ))}
             </div>
-            <button onClick={topup} disabled={busy || topupId === null} style={primaryBtnStyle}>
+            <button onClick={topup} disabled={busy || topupId === null} style={{ ...primaryBtnStyle, opacity: (busy || topupId === null) ? 0.4 : 1, cursor: (busy || topupId === null) ? "not-allowed" : "pointer" }}>
               {busy ? "…" : `give ${topupAmt} pts`}
             </button>
           </div>
