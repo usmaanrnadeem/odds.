@@ -25,6 +25,16 @@ function MarketTitle({ title, username, tokenKey }: { title: string; username: s
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────
+function fmtCloseTime(closesAt: string): string {
+  const diff = new Date(closesAt).getTime() - Date.now();
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `closes in ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `closes in ${hrs}h ${mins % 60}m`;
+  return `closes ${new Date(closesAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+}
+
 // ── LMSR cost preview ─────────────────────────────────────────
 // Exact cost formula so the preview matches the backend exactly.
 function logSumExp(a: number, b: number): number {
@@ -186,15 +196,6 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
     } catch { return null; }
   })();
 
-  function fmtCloseTime(closesAt: string): string {
-    const diff = new Date(closesAt).getTime() - Date.now();
-    const mins = Math.round(diff / 60000);
-    if (mins < 60) return `closes in ${mins}m`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `closes in ${hrs}h ${mins % 60}m`;
-    return `closes ${new Date(closesAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-  }
-
   return (
     <>
       <Nav />
@@ -348,7 +349,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
             <button
               onClick={trade}
-              disabled={busy || (tab === "buy" && costPreview?.value !== null && costPreview?.value !== undefined && user.points < (costPreview.value ?? 0))}
+              disabled={busy || (tab === "sell" && position === null) || (tab === "buy" && costPreview?.value !== null && costPreview?.value !== undefined && user.points < (costPreview.value ?? 0))}
               style={{
                 width: "100%", padding: "16px",
                 background: side ? "var(--accent)" : "var(--no)",

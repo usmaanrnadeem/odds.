@@ -136,12 +136,6 @@ export const api = {
       `/admin/users/${userId}/topup?amount=${amount}`,
       { method: "POST" }
     ),
-  resetPassword: (userId: number, password: string) =>
-    req<{ ok: boolean; username: string }>(
-      `/admin/users/${userId}/reset-password`,
-      { method: "POST", body: JSON.stringify({ password }) }
-    ),
-
   // Admin
   createMarket: (title: string, description: string | null, b: number, closes_at: string | null, subject_user_id: number | null) =>
     req<Market>("/admin/markets", {

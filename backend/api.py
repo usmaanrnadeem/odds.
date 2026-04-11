@@ -17,8 +17,6 @@ from . import lmsr
 from .auth import (
     create_token,
     get_current_user,
-    hash_password,
-    verify_password,
 )
 from .bots import start_bots, stop_bots
 from .db import close_pool, get_pool, init_pool
@@ -201,9 +199,9 @@ def _market_out(row: asyncpg.Record) -> MarketOut:
         settled_at=row["settled_at"].isoformat() if row["settled_at"] else None,
         settled_side=row["settled_side"],
         closes_at=row["closes_at"].isoformat() if row["closes_at"] else None,
-        subject_user_id=row["subject_user_id"] if "subject_user_id" in row.keys() else None,
-        subject_username=row["subject_username"] if "subject_username" in row.keys() else None,
-        subject_token_key=row["subject_token_key"] if "subject_token_key" in row.keys() else None,
+        subject_user_id=row["subject_user_id"],
+        subject_username=row["subject_username"],
+        subject_token_key=row["subject_token_key"],
     )
 
 
@@ -1054,6 +1052,16 @@ async def create_market(
             raise HTTPException(status_code=400, detail="Invalid closes_at format")
 
     pool = get_pool()
+
+    # Validate subject is a member of the same group
+    if body.subject_user_id and group_id:
+        member = await pool.fetchrow(
+            "SELECT 1 FROM group_memberships WHERE user_id = $1 AND group_id = $2",
+            body.subject_user_id, group_id,
+        )
+        if not member:
+            raise HTTPException(status_code=400, detail="Subject user is not in your group")
+
     row = await pool.fetchrow(
         """INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at, subject_user_id)
            VALUES ($1, $2, $3, 'open', $4, $5, $6, $7)
@@ -1297,36 +1305,8 @@ async def topup_user(
     return {"user_id": row["userid"], "username": row["username"], "new_balance": float(row["points"])}
 
 
-@app.post("/admin/users/{target_user_id}/reset-password")
-async def reset_password(
-    target_user_id: int,
-    body: dict,
-    current: Annotated[dict, Depends(get_current_user)],
-):
-    if current.get("group_role") != "admin" and not current["is_admin"]:
-        raise HTTPException(status_code=403, detail="Group admin only")
 
-    new_password = body.get("password", "")
-    if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-
-    pool = get_pool()
-    # Group admins can only reset passwords of members in their own group
-    if not current["is_admin"]:
-        member = await pool.fetchrow(
-            "SELECT 1 FROM group_memberships WHERE user_id = $1 AND group_id = $2",
-            target_user_id, current["group_id"],
-        )
-        if not member:
-            raise HTTPException(status_code=403, detail="User not in your group")
-
-    row = await pool.fetchrow(
-        "UPDATE users SET password_hash = $1 WHERE userid = $2 RETURNING username",
-        hash_password(new_password), target_user_id,
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"ok": True, "username": row["username"]}
+# reset-password endpoint removed — no passwords in this system
 
 
 # ── WebSocket ────────────────────────────────────────────────

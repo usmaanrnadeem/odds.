@@ -22,9 +22,6 @@ class GroupCreate(BaseModel):
 
 
 class GroupJoin(BaseModel):
-    # Either name+password (manual join) OR join_token (link join)
-    name: Optional[str] = None
-    password: Optional[str] = None
     join_token: Optional[str] = None
 
 
