@@ -17,10 +17,30 @@ export const PALETTE: Record<string, string> = {
   ".": "transparent",
 };
 
-export type TokenKey = "wizard" | "rocket" | "fox" | "knight" | "shark" | "bull" | "ghost" | "dragon";
+export type StandardTokenKey = "wizard" | "rocket" | "fox" | "knight" | "shark" | "bull" | "ghost" | "dragon";
+export type CustomTokenKey = "p_ati" | "p_finn" | "p_ritz" | "p_esele" | "p_nugith" | "p_alex" | "p_usmaan";
+export type TokenKey = StandardTokenKey | CustomTokenKey;
+
+export const CUSTOM_TOKEN_KEYS: CustomTokenKey[] = [
+  "p_ati", "p_finn", "p_ritz", "p_esele", "p_nugith", "p_alex", "p_usmaan",
+];
+
+export const CUSTOM_TOKEN_LABELS: Record<CustomTokenKey, string> = {
+  p_ati:    "ati",
+  p_finn:   "finn",
+  p_ritz:   "ritz",
+  p_esele:  "esele",
+  p_nugith: "nugith",
+  p_alex:   "alex",
+  p_usmaan: "usmaan",
+};
+
+export function isCustomToken(key: TokenKey): key is CustomTokenKey {
+  return key.startsWith("p_");
+}
 
 // Each string is a row of 16 chars
-const TOKENS: Record<TokenKey, string[]> = {
+const TOKENS: Record<StandardTokenKey, string[]> = {
   wizard: [
     "....VVVVVV......",
     "...VVVVVVVV.....",
@@ -169,7 +189,7 @@ const TOKENS: Record<TokenKey, string[]> = {
 
 export function drawToken(
   ctx: CanvasRenderingContext2D,
-  key: TokenKey,
+  key: StandardTokenKey,
   size: number,
 ) {
   const grid = TOKENS[key];

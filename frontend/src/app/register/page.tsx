@@ -1,11 +1,17 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Token from "@/components/Token";
-import { TOKEN_KEYS, TOKEN_LABELS, TokenKey } from "@/lib/tokens";
+import {
+  TOKEN_KEYS, TOKEN_LABELS, TokenKey,
+  CUSTOM_TOKEN_KEYS, CUSTOM_TOKEN_LABELS, CustomTokenKey,
+} from "@/lib/tokens";
+
+// Group ID that gets the custom friend tokens
+const CUSTOM_TOKEN_GROUP_ID = 1;
 
 function RegisterPageInner() {
   const router       = useRouter();
@@ -13,10 +19,27 @@ function RegisterPageInner() {
   const token        = searchParams.get("token");
   const { refresh } = useUser();
 
-  const [username, setUsername] = useState("");
-  const [tokenKey, setTokenKey] = useState<TokenKey>("rocket");
-  const [error,    setError]    = useState("");
-  const [busy,     setBusy]     = useState(false);
+  const [username,    setUsername]    = useState("");
+  const [tokenKey,    setTokenKey]    = useState<TokenKey>("rocket");
+  const [error,       setError]       = useState("");
+  const [busy,        setBusy]        = useState(false);
+  const [useCustom,   setUseCustom]   = useState(false);
+
+  // If there's a join token, preview the group to decide which token set to show
+  useEffect(() => {
+    if (!token) return;
+    api.previewGroup(token)
+      .then(g => {
+        if (g.group_id === CUSTOM_TOKEN_GROUP_ID) {
+          setUseCustom(true);
+          setTokenKey("p_ati"); // default selection
+        }
+      })
+      .catch(() => {}); // silently ignore — fall back to standard tokens
+  }, [token]);
+
+  const displayKeys   = useCustom ? CUSTOM_TOKEN_KEYS   : TOKEN_KEYS;
+  const displayLabels = useCustom ? CUSTOM_TOKEN_LABELS  : TOKEN_LABELS;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +48,6 @@ function RegisterPageInner() {
     try {
       const u = await api.register(username, tokenKey);
       if (u.access_token) tokenStore.set(u.access_token);
-      // Clear so onboarding always shows for a fresh registration
       localStorage.removeItem("onboarding_v1_seen");
       await refresh();
       router.push(token ? `/join?token=${token}` : "/join");
@@ -51,12 +73,12 @@ function RegisterPageInner() {
           <div>
             <p className="text-xs mb-3 font-mono" style={{ color: "var(--muted)" }}>CHOOSE YOUR TOKEN</p>
             <div className="grid grid-cols-4 gap-2">
-              {TOKEN_KEYS.map(key => (
+              {(displayKeys as TokenKey[]).map(key => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setTokenKey(key)}
-                  title={TOKEN_LABELS[key]}
+                  title={(displayLabels as Record<string, string>)[key]}
                   style={{
                     padding: "12px 8px",
                     background: tokenKey === key ? "var(--surface)" : "transparent",
@@ -71,7 +93,7 @@ function RegisterPageInner() {
                 >
                   <Token tokenKey={key} size={40} />
                   <span className="font-mono text-xs" style={{ color: tokenKey === key ? "var(--accent)" : "var(--muted)" }}>
-                    {TOKEN_LABELS[key].toLowerCase()}
+                    {(displayLabels as Record<string, string>)[key].toLowerCase()}
                   </span>
                 </button>
               ))}
