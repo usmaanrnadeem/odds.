@@ -11,7 +11,6 @@ function LoginPageInner() {
   const token        = searchParams.get("token");
   const { user, loading, refresh } = useUser();
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [error,    setError]    = useState("");
   const [busy,     setBusy]     = useState(false);
 
@@ -25,7 +24,7 @@ function LoginPageInner() {
     setError("");
     setBusy(true);
     try {
-      const u = await api.login(username, password);
+      const u = await api.login(username);
       if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
       router.push(token ? `/join?token=${token}` : "/");
@@ -58,15 +57,6 @@ function LoginPageInner() {
             onChange={e => setUsername(e.target.value)}
             required
             autoComplete="username"
-            className="auth-input"
-          />
-          <input
-            type="password"
-            placeholder="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
             className="auth-input"
           />
           {error && (

@@ -66,7 +66,7 @@ function JoinPageInner() {
     e.preventDefault();
     setError(""); setBusy(true);
     try {
-      const g = await api.createGroup(createName, createPw, createInvite);
+      const g = await api.createGroup(createName, createInvite);
       tokenStore.set(g.access_token);
       await refresh();
       router.push("/");
@@ -140,7 +140,7 @@ function JoinPageInner() {
     );
   }
 
-  // ── Manual flow ──────────────────────────────────────────
+  // ── Manual flow (create universe only) ──────────────────
   return (
     <main className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--canvas)" }}>
       <div className="w-full max-w-sm">
@@ -149,50 +149,19 @@ function JoinPageInner() {
             odds.
           </span>
           <p className="mt-1 text-sm" style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>
-            enter your universe
+            create your universe
           </p>
         </div>
 
-        <div style={{ display: "flex", marginBottom: 24, borderBottom: "1px solid var(--border)" }}>
-          {(["join", "create"] as Tab[]).map(t => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setError(""); }}
-              style={{
-                flex: 1, padding: "10px", background: "none", border: "none",
-                borderBottom: `2px solid ${tab === t ? "var(--accent)" : "transparent"}`,
-                fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
-                letterSpacing: "0.08em",
-                color: tab === t ? "var(--accent)" : "var(--muted)",
-                cursor: "pointer", textTransform: "uppercase",
-              }}
-            >
-              {t === "join" ? "join universe" : "create universe"}
-            </button>
-          ))}
-        </div>
-
-        {tab === "join" && (
-          <form onSubmit={handleJoin} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <input placeholder="universe name" value={joinName} onChange={e => setJoinName(e.target.value)} required className="auth-input" />
-            <input type="password" placeholder="universe password" value={joinPassword} onChange={e => setJoinPassword(e.target.value)} required className="auth-input" />
-            {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
-            <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "joining…" : "join"}</button>
-          </form>
-        )}
-
-        {tab === "create" && (
-          <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0 }}>
-              you need an invite from the master admin to create a universe
-            </p>
-            <input placeholder="universe name" value={createName} onChange={e => setCreateName(e.target.value)} required minLength={2} maxLength={50} className="auth-input" />
-            <input type="password" placeholder="set a password" value={createPw} onChange={e => setCreatePw(e.target.value)} required minLength={4} className="auth-input" />
-            <input placeholder="invite token" value={createInvite} onChange={e => setCreateInvite(e.target.value)} required className="auth-input" />
-            {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
-            <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "creating…" : "create universe"}</button>
-          </form>
-        )}
+        <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0 }}>
+            you need an invite from the master admin to create a universe
+          </p>
+          <input placeholder="universe name" value={createName} onChange={e => setCreateName(e.target.value)} required minLength={2} maxLength={50} className="auth-input" />
+          <input placeholder="invite token" value={createInvite} onChange={e => setCreateInvite(e.target.value)} required className="auth-input" />
+          {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
+          <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "creating…" : "create universe"}</button>
+        </form>
       </div>
 
       <style>{`

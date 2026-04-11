@@ -220,8 +220,8 @@ async def register(body: RegisterRequest, response: Response):
         if await con.fetchrow("SELECT 1 FROM users WHERE username = $1", body.username):
             raise HTTPException(status_code=409, detail="Username already taken")
         user = await con.fetchrow(
-            "INSERT INTO users (username, password_hash, token_key) VALUES ($1, $2, $3) RETURNING *",
-            body.username, hash_password(body.password), body.token_key,
+            "INSERT INTO users (username, token_key) VALUES ($1, $2) RETURNING *",
+            body.username, body.token_key,
         )
 
     token = create_token(user["userid"], user["is_admin"])
@@ -249,8 +249,8 @@ async def login(body: LoginRequest, response: Response):
         """,
         body.username,
     )
-    if not row or not verify_password(body.password, row["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+    if not row:
+        raise HTTPException(status_code=401, detail="Username not found")
 
     token = create_token(row["userid"], row["is_admin"], row["group_id"], row["group_role"])
     response.set_cookie("access_token", token, httponly=True, samesite="none", secure=True, max_age=86400)
@@ -315,8 +315,8 @@ async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_c
         async with con.transaction():
             join_tok = secrets.token_urlsafe(16)
             group = await con.fetchrow(
-                "INSERT INTO groups (name, password_hash, created_by, join_token) VALUES ($1, $2, $3, $4) RETURNING *",
-                body.name, hash_password(body.password), current["user_id"], join_tok,
+                "INSERT INTO groups (name, created_by, join_token) VALUES ($1, $2, $3) RETURNING *",
+                body.name, current["user_id"], join_tok,
             )
             await con.execute(
                 "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'admin')",
@@ -340,22 +340,17 @@ async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_c
 
 @app.post("/groups/join", response_model=GroupOut)
 async def join_group(body: GroupJoin, current: Annotated[dict, Depends(get_current_user)]):
-    """Join via name+password OR a shareable join_token link."""
+    """Join via shareable join_token link."""
     pool = get_pool()
     async with pool.acquire() as con:
         if await con.fetchrow("SELECT 1 FROM group_memberships WHERE user_id = $1", current["user_id"]):
             raise HTTPException(status_code=400, detail="You are already in a group")
 
-        if body.join_token:
-            group = await con.fetchrow("SELECT * FROM groups WHERE join_token = $1", body.join_token)
-            if not group:
-                raise HTTPException(status_code=400, detail="Invalid or expired invite link")
-        elif body.name and body.password:
-            group = await con.fetchrow("SELECT * FROM groups WHERE name = $1", body.name)
-            if not group or not verify_password(body.password, group["password_hash"]):
-                raise HTTPException(status_code=401, detail="Invalid group name or password")
-        else:
-            raise HTTPException(status_code=400, detail="Provide either join_token or name+password")
+        if not body.join_token:
+            raise HTTPException(status_code=400, detail="Invite link required")
+        group = await con.fetchrow("SELECT * FROM groups WHERE join_token = $1", body.join_token)
+        if not group:
+            raise HTTPException(status_code=400, detail="Invalid or expired invite link")
 
         await con.execute(
             "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'member')",

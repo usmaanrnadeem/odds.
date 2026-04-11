@@ -14,7 +14,6 @@ function RegisterPageInner() {
   const { refresh } = useUser();
 
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [tokenKey, setTokenKey] = useState<TokenKey>("rocket");
   const [error,    setError]    = useState("");
   const [busy,     setBusy]     = useState(false);
@@ -24,7 +23,7 @@ function RegisterPageInner() {
     setError("");
     setBusy(true);
     try {
-      const u = await api.register(username, password, tokenKey);
+      const u = await api.register(username, tokenKey);
       if (u.access_token) tokenStore.set(u.access_token);
       // Clear so onboarding always shows for a fresh registration
       localStorage.removeItem("onboarding_v1_seen");
@@ -88,16 +87,6 @@ function RegisterPageInner() {
             minLength={2}
             maxLength={30}
             autoComplete="username"
-            className="auth-input"
-          />
-          <input
-            type="password"
-            placeholder="password (6+ chars)"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            minLength={6}
-            autoComplete="new-password"
             className="auth-input"
           />
           {error && (

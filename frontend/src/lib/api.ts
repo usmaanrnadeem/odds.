@@ -64,20 +64,20 @@ export type Group = {
 export const api = {
   // Auth
   me: () => req<User>("/auth/me"),
-  login: (username: string, password: string) =>
-    req<User>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-  register: (username: string, password: string, token_key: string) =>
+  login: (username: string) =>
+    req<User>("/auth/login", { method: "POST", body: JSON.stringify({ username }) }),
+  register: (username: string, token_key: string) =>
     req<User>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password, token_key }),
+      body: JSON.stringify({ username, token_key }),
     }),
   logout: () => req<{ ok: boolean }>("/auth/logout", { method: "POST" }),
 
   // Groups
-  createGroup: (name: string, password: string, invite_token: string) =>
+  createGroup: (name: string, invite_token: string) =>
     req<Group>("/groups", {
       method: "POST",
-      body: JSON.stringify({ name, password, invite_token }),
+      body: JSON.stringify({ name, invite_token }),
     }),
   joinGroup: (name: string, password: string) =>
     req<Group>("/groups/join", {

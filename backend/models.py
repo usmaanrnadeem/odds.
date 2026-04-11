@@ -13,14 +13,11 @@ VALID_RARITY = Literal["legendary", "rare", "common"]
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
-    password: str = Field(..., min_length=6)
     token_key: VALID_TOKENS = "rocket"
-    # invite_token removed — registration is now open; invite is used to CREATE a group
 
 
 class GroupCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=50)
-    password: str = Field(..., min_length=4)
     invite_token: str  # consumed to create the group; creator becomes group admin
 
 
@@ -42,7 +39,6 @@ class GroupOut(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str
-    password: str
 
 
 class UserOut(BaseModel):
