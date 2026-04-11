@@ -27,8 +27,6 @@ export default function ManagePage() {
   const [joinToken,  setJoinToken]  = useState<string | null>(null);
   const [copied,     setCopied]     = useState(false);
 
-  const [resetId,    setResetId]    = useState<number | null>(null);
-  const [resetPw,    setResetPw]    = useState("");
 
   useEffect(() => {
     if (!loading && (!user || user.group_role !== "admin")) router.replace("/");
@@ -93,21 +91,6 @@ export default function ManagePage() {
     }
   }
 
-  async function resetPassword() {
-    if (resetId === null || resetPw.length < 6) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const result = await api.resetPassword(resetId, resetPw);
-      setMsg(`Password reset for ${result.username}`);
-      setResetId(null);
-      setResetPw("");
-    } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (loading || user?.group_role !== "admin") return null;
 
@@ -289,36 +272,6 @@ export default function ManagePage() {
           </div>
         </section>
 
-        {/* Reset password */}
-        <section style={{ marginTop: 32 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>RESET PASSWORD</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <select
-              value={resetId ?? ""}
-              onChange={e => setResetId(e.target.value ? parseInt(e.target.value) : null)}
-              style={{ ...inputStyle, appearance: "none" }}
-            >
-              <option value="">select player…</option>
-              {members.map(m => (
-                <option key={m.user_id} value={m.user_id}>{m.username}</option>
-              ))}
-            </select>
-            <input
-              type="password"
-              placeholder="new password (6+ chars)"
-              value={resetPw}
-              onChange={e => setResetPw(e.target.value)}
-              style={inputStyle}
-            />
-            <button
-              onClick={resetPassword}
-              disabled={busy || resetId === null || resetPw.length < 6}
-              style={primaryBtnStyle}
-            >
-              {busy ? "…" : "reset password"}
-            </button>
-          </div>
-        </section>
       </main>
     </>
   );
