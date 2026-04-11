@@ -143,10 +143,10 @@ export const api = {
     ),
 
   // Admin
-  createMarket: (title: string, description: string | null, b: number, closes_at: string | null) =>
+  createMarket: (title: string, description: string | null, b: number, closes_at: string | null, subject_user_id: number | null) =>
     req<Market>("/admin/markets", {
       method: "POST",
-      body: JSON.stringify({ title, description, b, closes_at }),
+      body: JSON.stringify({ title, description, b, closes_at, subject_user_id }),
     }),
   settleMarket: (id: number, side: boolean) =>
     req<SettleResult>(`/admin/markets/${id}/settle`, {
@@ -175,6 +175,9 @@ export type Market = {
   settled_at: string | null;
   settled_side: boolean | null;
   closes_at: string | null;
+  subject_user_id: number | null;
+  subject_username: string | null;
+  subject_token_key: string | null;
 };
 
 export type FeedEntry = {

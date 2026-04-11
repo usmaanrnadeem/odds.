@@ -9,12 +9,13 @@ export default function ManagePage() {
   const { user, loading } = useUser();
   const router = useRouter();
 
-  const [title,    setTitle]    = useState("");
-  const [desc,     setDesc]     = useState("");
-  const [b,        setB]        = useState(30);
-  const [closesAt, setClosesAt] = useState("");
-  const [busy,     setBusy]     = useState(false);
-  const [msg,      setMsg]      = useState("");
+  const [title,     setTitle]     = useState("");
+  const [desc,      setDesc]      = useState("");
+  const [b,         setB]         = useState(30);
+  const [closesAt,  setClosesAt]  = useState("");
+  const [subjectId, setSubjectId] = useState<number | null>(null);
+  const [busy,      setBusy]      = useState(false);
+  const [msg,       setMsg]       = useState("");
 
   const [markets,    setMarkets]    = useState<Market[]>([]);
   const [settleId,   setSettleId]   = useState<number | null>(null);
@@ -48,9 +49,9 @@ export default function ManagePage() {
     try {
       // Convert local datetime-local value to UTC ISO string, or null
       const closesAtUtc = closesAt ? new Date(closesAt).toISOString() : null;
-      const m = await api.createMarket(title, desc || null, b, closesAtUtc);
+      const m = await api.createMarket(title, desc || null, b, closesAtUtc, subjectId);
       setMsg(`Created: "${m.title}"`);
-      setTitle(""); setDesc(""); setClosesAt("");
+      setTitle(""); setDesc(""); setClosesAt(""); setSubjectId(null);
       setMarkets(prev => [m, ...prev]);
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Failed");
@@ -188,6 +189,19 @@ export default function ManagePage() {
                 onChange={e => setClosesAt(e.target.value)}
                 style={{ ...inputStyle, colorScheme: "dark" }}
               />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>about a player (optional):</label>
+              <select
+                value={subjectId ?? ""}
+                onChange={e => setSubjectId(e.target.value ? parseInt(e.target.value) : null)}
+                style={{ ...inputStyle, appearance: "none" }}
+              >
+                <option value="">no specific player</option>
+                {members.map(m => (
+                  <option key={m.user_id} value={m.user_id}>{m.username}</option>
+                ))}
+              </select>
             </div>
             <button type="submit" disabled={busy} style={primaryBtnStyle}>
               {busy ? "…" : "create market"}

@@ -8,6 +8,23 @@ import Token from "@/components/Token";
 import ChatPanel from "@/components/ChatPanel";
 import { TokenKey } from "@/lib/tokens";
 
+// ── Title with subject name highlighted ──────────────────────
+function MarketTitle({ title, username, tokenKey }: { title: string; username: string | null; tokenKey: string | null }) {
+  if (!username || !tokenKey) return <span>{title}</span>;
+  const idx = title.toLowerCase().indexOf(username.toLowerCase());
+  if (idx === -1) return <span>{title}</span>;
+  return (
+    <span>
+      {title.slice(0, idx)}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, verticalAlign: "middle" }}>
+        <Token tokenKey={tokenKey as TokenKey} size={16} />
+        <span style={{ color: "var(--accent)", fontWeight: 600 }}>{title.slice(idx, idx + username.length)}</span>
+      </span>
+      {title.slice(idx + username.length)}
+    </span>
+  );
+}
+
 // ── LMSR cost preview ─────────────────────────────────────────
 // Exact cost formula so the preview matches the backend exactly.
 function logSumExp(a: number, b: number): number {
@@ -196,9 +213,19 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           ← markets
         </button>
 
-        {/* Title */}
+        {/* Subject tag */}
+        {market.subject_username && market.subject_token_key && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <Token tokenKey={market.subject_token_key as TokenKey} size={20} />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", letterSpacing: "0.1em" }}>
+              {market.subject_username.toUpperCase()}
+            </span>
+          </div>
+        )}
+
+        {/* Title — highlight subject's name if it appears */}
         <h1 style={{ fontSize: 17, fontWeight: 600, marginBottom: 20, lineHeight: 1.4, color: "var(--text)" }}>
-          {market.title}
+          <MarketTitle title={market.title} username={market.subject_username} tokenKey={market.subject_token_key} />
         </h1>
 
         {/* Big probability display */}

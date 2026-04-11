@@ -5,6 +5,8 @@ import Link from "next/link";
 import { api, Market, WSEvent, connectWS } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
+import Token from "@/components/Token";
+import { TokenKey } from "@/lib/tokens";
 import OnboardingModal, { hasSeenOnboarding } from "@/components/OnboardingModal";
 
 function fmtCloseTime(closesAt: string): string {
@@ -22,6 +24,27 @@ function OddsBar({ yesProb }: { yesProb: number }) {
     <div style={{ height: 3, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
       <div style={{ height: "100%", width: `${yesPct}%`, background: "var(--accent)", transition: "width 0.4s ease" }} />
     </div>
+  );
+}
+
+// Render title with subject's name highlighted + token inline
+function MarketTitle({ title, username, tokenKey }: { title: string; username: string | null; tokenKey: string | null }) {
+  if (!username || !tokenKey) {
+    return <span>{title}</span>;
+  }
+  const idx = title.toLowerCase().indexOf(username.toLowerCase());
+  if (idx === -1) {
+    return <span>{title}</span>;
+  }
+  return (
+    <span>
+      {title.slice(0, idx)}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, verticalAlign: "middle" }}>
+        <Token tokenKey={tokenKey as TokenKey} size={16} />
+        <span style={{ color: "var(--accent)", fontWeight: 600 }}>{title.slice(idx, idx + username.length)}</span>
+      </span>
+      {title.slice(idx + username.length)}
+    </span>
   );
 }
 
@@ -59,8 +82,16 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
             </span>
           )}
         </div>
+        {market.subject_username && market.subject_token_key && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <Token tokenKey={market.subject_token_key as TokenKey} size={18} />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", letterSpacing: "0.08em" }}>
+              {market.subject_username.toUpperCase()}
+            </span>
+          </div>
+        )}
         <p style={{ margin: "0 0 12px", fontSize: 15, color: "var(--text)", lineHeight: 1.4 }}>
-          {market.title}
+          <MarketTitle title={market.title} username={market.subject_username} tokenKey={market.subject_token_key} />
         </p>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--accent)" }}>

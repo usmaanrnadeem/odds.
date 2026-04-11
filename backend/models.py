@@ -58,8 +58,9 @@ class UserOut(BaseModel):
 class MarketCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     description: Optional[str] = None
-    b: float = Field(default=100.0, ge=10.0, le=10000.0)
-    closes_at: Optional[str] = None  # ISO 8601 UTC string; trading locks after this time
+    b: float = Field(default=30.0, ge=10.0, le=10000.0)
+    closes_at: Optional[str] = None
+    subject_user_id: Optional[int] = None
 
 
 class MarketOut(BaseModel):
@@ -78,6 +79,9 @@ class MarketOut(BaseModel):
     settled_at: Optional[str]
     settled_side: Optional[bool]
     closes_at: Optional[str]
+    subject_user_id: Optional[int] = None
+    subject_username: Optional[str] = None
+    subject_token_key: Optional[str] = None
 
 
 # ── Trading ─────────────────────────────────────────────────

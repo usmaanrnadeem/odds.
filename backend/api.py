@@ -201,6 +201,9 @@ def _market_out(row: asyncpg.Record) -> MarketOut:
         settled_at=row["settled_at"].isoformat() if row["settled_at"] else None,
         settled_side=row["settled_side"],
         closes_at=row["closes_at"].isoformat() if row["closes_at"] else None,
+        subject_user_id=row["subject_user_id"] if "subject_user_id" in row.keys() else None,
+        subject_username=row["subject_username"] if "subject_username" in row.keys() else None,
+        subject_token_key=row["subject_token_key"] if "subject_token_key" in row.keys() else None,
     )
 
 
@@ -526,19 +529,25 @@ async def send_group_chat(body: MessageIn, current: Annotated[dict, Depends(get_
 
 # ── Market routes ────────────────────────────────────────────
 
+_MARKET_WITH_SUBJECT = """
+    SELECT m.*, u.username AS subject_username, u.token_key AS subject_token_key
+    FROM markets m
+    LEFT JOIN users u ON u.userid = m.subject_user_id
+"""
+
 @app.get("/markets", response_model=list[MarketOut])
 async def list_markets(current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
     if current["is_admin"]:
         rows = await pool.fetch(
-            "SELECT * FROM markets WHERE status IN ('open','settled') ORDER BY created_at DESC"
+            _MARKET_WITH_SUBJECT + "WHERE m.status IN ('open','settled') ORDER BY m.created_at DESC"
         )
     else:
         group_id = current.get("group_id")
         if not group_id:
             return []
         rows = await pool.fetch(
-            "SELECT * FROM markets WHERE group_id = $1 AND status IN ('open','settled') ORDER BY created_at DESC",
+            _MARKET_WITH_SUBJECT + "WHERE m.group_id = $1 AND m.status IN ('open','settled') ORDER BY m.created_at DESC",
             group_id,
         )
     return [_market_out(r) for r in rows]
@@ -547,7 +556,12 @@ async def list_markets(current: Annotated[dict, Depends(get_current_user)]):
 @app.get("/markets/{market_id}", response_model=MarketOut)
 async def get_market(market_id: int, current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
-    row = await _require_market(pool, market_id)
+    row = await pool.fetchrow(
+        _MARKET_WITH_SUBJECT + "WHERE m.marketid = $1",
+        market_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Market not found")
     if not current["is_admin"] and row["group_id"] != current.get("group_id"):
         raise HTTPException(status_code=404, detail="Market not found")
     return _market_out(row)
@@ -1041,8 +1055,11 @@ async def create_market(
 
     pool = get_pool()
     row = await pool.fetchrow(
-        "INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at) VALUES ($1, $2, $3, 'open', $4, $5, $6) RETURNING *",
-        body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt,
+        """INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at, subject_user_id)
+           VALUES ($1, $2, $3, 'open', $4, $5, $6, $7)
+           RETURNING *, (SELECT username FROM users WHERE userid = $7) AS subject_username,
+                       (SELECT token_key FROM users WHERE userid = $7) AS subject_token_key""",
+        body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt, body.subject_user_id,
     )
     await manager.broadcast(
         WSMarketCreatedEvent(
