@@ -134,7 +134,7 @@ function JoinPageInner() {
     return (
       <main className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--canvas)" }}>
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
-          {previewError || `joining ${previewName ?? "universe"}…`}
+          {previewError || `joining ${previewName ?? "group"}…`}
         </p>
       </main>
     );
@@ -149,18 +149,18 @@ function JoinPageInner() {
             odds.
           </span>
           <p className="mt-1 text-sm" style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>
-            create your universe
+            create your group
           </p>
         </div>
 
         <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0 }}>
-            you need an invite from the master admin to create a universe
+            you need an invite from the master admin to create a group
           </p>
-          <input placeholder="universe name" value={createName} onChange={e => setCreateName(e.target.value)} required minLength={2} maxLength={50} className="auth-input" />
+          <input placeholder="group name" value={createName} onChange={e => setCreateName(e.target.value)} required minLength={2} maxLength={50} className="auth-input" />
           <input placeholder="invite token" value={createInvite} onChange={e => setCreateInvite(e.target.value)} required className="auth-input" />
           {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
-          <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "creating…" : "create universe"}</button>
+          <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "creating…" : "create group"}</button>
         </form>
       </div>
 

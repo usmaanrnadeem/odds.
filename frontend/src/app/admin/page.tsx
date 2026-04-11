@@ -44,7 +44,7 @@ export default function AdminPage() {
         <section>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>INVITE TOKEN</p>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 16, lineHeight: 1.6 }}>
-            Send this to someone so they can create their own universe.
+            Send this to someone so they can create their own group.
             Each token is single-use and expires in 24h.
           </p>
           <button onClick={genInvite} disabled={busy} style={primaryBtnStyle}>

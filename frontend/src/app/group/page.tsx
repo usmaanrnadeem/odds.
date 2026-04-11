@@ -34,7 +34,7 @@ export default function GroupPage() {
       <Nav />
       <main className="page-content">
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", marginBottom: 4 }}>
-          UNIVERSE
+          GROUP
         </p>
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--accent)", marginBottom: 28 }}>
           {user.group_name}

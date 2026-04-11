@@ -53,11 +53,11 @@ export default function LeaderboardPage() {
     <>
       <Nav />
       <main className="page-content">
-        {/* Universe header */}
+        {/* Group header */}
         {user.group_name && (
           <div style={{ marginBottom: 24 }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: "0 0 4px" }}>
-              UNIVERSE
+              GROUP
             </p>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--accent)" }}>
