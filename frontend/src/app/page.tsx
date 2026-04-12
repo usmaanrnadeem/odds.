@@ -60,7 +60,7 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
           padding: "16px",
           background: "var(--surface)",
           border: "1px solid var(--border)",
-          marginBottom: 1,
+          marginBottom: 8,
           cursor: "pointer",
           transition: "border-color 0.15s",
         }}
