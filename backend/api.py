@@ -601,7 +601,7 @@ async def market_activity(market_id: int, _: Annotated[dict, Depends(get_current
     pool = get_pool()
     rows = await pool.fetch(
         """
-        SELECT t.tradeID, u.username, u.token_key, t.side, t.quantity, t.cost, t.timestamp
+        SELECT t.tradeID, u.username, u.token_key, t.side, t.quantity, t.cost, t.is_sell, t.timestamp
         FROM trades t
         JOIN users u ON u.userID = t.userID
         WHERE t.marketID = $1 AND t.is_bot = FALSE
@@ -613,6 +613,7 @@ async def market_activity(market_id: int, _: Annotated[dict, Depends(get_current
     return [
         FeedEntry(
             trade_id=r["tradeid"],
+            is_sell=bool(r["is_sell"]),
             username=r["username"],
             token_key=r["token_key"],
             side=r["side"],
@@ -742,6 +743,7 @@ async def buy(
 
     feed_entry = FeedEntry(
         trade_id=row["tradeid"],
+        is_sell=False,
         username=row["username"],
         token_key=row["token_key"],
         side=body.side,
@@ -831,8 +833,8 @@ async def sell(
                     WHERE marketID = $3 AND EXISTS (SELECT 1 FROM pos)
                 ),
                 trd AS (
-                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
-                    SELECT $3, $2, TRUE, $1, $4, FALSE FROM pos
+                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot, is_sell)
+                    SELECT $3, $2, TRUE, $1, $4, FALSE, TRUE FROM pos
                     RETURNING tradeID
                 )
                 SELECT trd.tradeID, usr.points, usr.username, usr.token_key
@@ -858,8 +860,8 @@ async def sell(
                     WHERE marketID = $3 AND EXISTS (SELECT 1 FROM pos)
                 ),
                 trd AS (
-                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot)
-                    SELECT $3, $2, FALSE, $1, $4, FALSE FROM pos
+                    INSERT INTO trades (marketID, userID, side, quantity, cost, is_bot, is_sell)
+                    SELECT $3, $2, FALSE, $1, $4, FALSE, TRUE FROM pos
                     RETURNING tradeID
                 )
                 SELECT trd.tradeID, usr.points, usr.username, usr.token_key
@@ -892,6 +894,7 @@ async def sell(
 
     feed_entry = FeedEntry(
         trade_id=row["tradeid"],
+        is_sell=True,
         username=row["username"],
         token_key=row["token_key"],
         side=body.side,

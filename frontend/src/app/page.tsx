@@ -95,10 +95,10 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
         </p>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--accent)" }}>
-            YES {market.yes_odds}×
+            YES {Math.round(market.yes_prob * 100)}%
           </span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--no)" }}>
-            NO {market.no_odds}×
+            NO {Math.round(market.no_prob * 100)}%
           </span>
         </div>
         <OddsBar yesProb={market.yes_prob} />

@@ -243,10 +243,10 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
           <div style={{ height: "100%", width: `${Math.round(market.yes_prob * 100)}%`, background: "var(--accent)", transition: "width 0.4s ease" }} />
         </div>
 
-        {/* Odds + close time */}
+        {/* Payout odds + close time */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
-            YES {market.yes_odds}×
+            YES pays {market.yes_odds}×
           </span>
           {canTrade && market.closes_at && (
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
@@ -254,7 +254,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
             </span>
           )}
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
-            NO {market.no_odds}×
+            NO pays {market.no_odds}×
           </span>
         </div>
 
@@ -287,7 +287,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
                 color: side ? "#000" : "var(--accent)",
                 fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
               }}>
-                YES {market.yes_odds}×
+                YES
               </button>
               <button onClick={() => setSide(false)} style={{
                 flex: 1, padding: "16px 12px",
@@ -296,7 +296,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
                 color: !side ? "#fff" : "var(--no)",
                 fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
               }}>
-                NO {market.no_odds}×
+                NO
               </button>
             </div>
 
@@ -325,22 +325,33 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
             </div>
 
             {/* Cost preview */}
-            <div style={{ marginBottom: 16, minHeight: 20, textAlign: "center" }}>
+            <div style={{ marginBottom: 16, minHeight: 20 }}>
               {costPreview && costPreview.warn && (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)" }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", margin: 0, textAlign: "center" }}>
                   you only hold {costPreview.warn} {side ? "YES" : "NO"}
-                </span>
+                </p>
               )}
               {costPreview && costPreview.value !== null && (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
-                  {costPreview.label}{" "}
-                  <span style={{ color: "var(--text)", fontWeight: 700 }}>
-                    {costPreview.value.toFixed(1)} pts
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
+                    {tab === "buy" ? "cost" : "you receive"}{" "}
+                    <span style={{ color: "var(--text)", fontWeight: 700 }}>
+                      {costPreview.value.toFixed(1)} pts
+                    </span>
+                    {tab === "buy" && user.points < costPreview.value && (
+                      <span style={{ color: "var(--no)", marginLeft: 8 }}>insufficient</span>
+                    )}
                   </span>
-                  {tab === "buy" && user.points < costPreview.value && (
-                    <span style={{ color: "var(--no)", marginLeft: 8 }}>insufficient balance</span>
+                  {tab === "buy" && (
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
+                      payout{" "}
+                      <span style={{ color: side ? "var(--accent)" : "var(--no)", fontWeight: 700 }}>
+                        {qty} pts
+                      </span>
+                      {" "}if {side ? "YES" : "NO"}
+                    </span>
                   )}
-                </span>
+                </div>
               )}
             </div>
 
@@ -432,6 +443,9 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
                   <Token tokenKey={entry.token_key as TokenKey} size={24} />
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", flex: 1 }}>
                     {entry.username}
+                  </span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)" }}>
+                    {entry.is_sell ? "sold" : "bought"}
                   </span>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)" }}>
                     {entry.side ? "YES" : "NO"} ×{entry.quantity}

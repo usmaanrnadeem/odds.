@@ -176,6 +176,7 @@ export type Market = {
 
 export type FeedEntry = {
   trade_id: number;
+  is_sell: boolean;
   username: string;
   token_key: string;
   side: boolean;

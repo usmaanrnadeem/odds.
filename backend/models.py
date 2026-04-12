@@ -109,6 +109,7 @@ class TradeOut(BaseModel):
 
 class FeedEntry(BaseModel):
     trade_id: int
+    is_sell: bool = False
     username: str
     token_key: str
     side: bool
