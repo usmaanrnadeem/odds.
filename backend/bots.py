@@ -23,12 +23,8 @@ BOT_TRADE_CHANCE  = 0.6      # probability a bot actually trades each cycle
 BOT_MIN_QTY       = 1
 BOT_MAX_QTY       = 5
 
-BOTS = [
-    {"name": "alice_noise",   "bias": None,  "weight": 0.5},   # random noise
-    {"name": "bob_yes",       "bias": True,  "weight": 0.75},   # slightly bullish
-    {"name": "carol_no",      "bias": False, "weight": 0.75},   # slightly bearish
-    {"name": "dave_opinion",  "bias": None,  "weight": 0.4},    # random, less active
-]
+# Bots disabled — real users provide price discovery
+BOTS: list = []
 
 # ── State ────────────────────────────────────────────────────────────────────
 
