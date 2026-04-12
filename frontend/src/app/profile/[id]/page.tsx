@@ -265,13 +265,19 @@ function TrophyCard({ trophy, tokenKey, onClick }: {
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const userId = parseInt(id);
-  const { user, loading } = useUser();
+  const { user, loading, logout } = useUser();
   const router = useRouter();
 
-  const [trophies,  setTrophies]  = useState<Trophy[]>([]);
-  const [profile,   setProfile]   = useState<LeaderboardEntry | null>(null);
-  const [fetching,  setFetching]  = useState(true);
-  const [selected,  setSelected]  = useState<Trophy | null>(null);
+  const [trophies,       setTrophies]       = useState<Trophy[]>([]);
+  const [profile,        setProfile]        = useState<LeaderboardEntry | null>(null);
+  const [fetching,       setFetching]       = useState(true);
+  const [selected,       setSelected]       = useState<Trophy | null>(null);
+  const [confirmLogout,  setConfirmLogout]  = useState(false);
+
+  async function handleLogout() {
+    await logout();
+    router.push("/login");
+  }
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -339,6 +345,36 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Logout — own profile only */}
+        {isOwnProfile && (
+          <div style={{ marginBottom: 32 }}>
+            {!confirmLogout ? (
+              <button
+                onClick={() => setConfirmLogout(true)}
+                style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer", padding: "8px 14px" }}
+              >
+                sign out
+              </button>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>sure?</span>
+                <button
+                  onClick={handleLogout}
+                  style={{ background: "var(--no)", border: "none", color: "#fff", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "8px 14px" }}
+                >
+                  yes, sign out
+                </button>
+                <button
+                  onClick={() => setConfirmLogout(false)}
+                  style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer", padding: "8px 14px" }}
+                >
+                  cancel
+                </button>
+              </div>
+            )}
           </div>
         )}
 
