@@ -21,7 +21,7 @@ function fmtCloseTime(closesAt: string): string {
 function OddsBar({ yesProb }: { yesProb: number }) {
   const yesPct = Math.round(yesProb * 100);
   return (
-    <div style={{ height: 3, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
+    <div style={{ height: 3, background: "var(--no)", borderRadius: 2, overflow: "hidden" }}>
       <div style={{ height: "100%", width: `${yesPct}%`, background: "var(--accent)", transition: "width 0.4s ease" }} />
     </div>
   );

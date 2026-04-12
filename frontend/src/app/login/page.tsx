@@ -24,7 +24,7 @@ function LoginPageInner() {
     setError("");
     setBusy(true);
     try {
-      const u = await api.login(username);
+      const u = await api.login(username.trim());
       if (u.access_token) tokenStore.set(u.access_token);
       await refresh();
       router.push(token ? `/join?token=${token}` : "/");

@@ -239,7 +239,7 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
         </div>
 
         {/* Probability bar */}
-        <div style={{ height: 4, background: "var(--border)", overflow: "hidden", marginBottom: 6 }}>
+        <div style={{ height: 4, background: "var(--no)", overflow: "hidden", marginBottom: 6 }}>
           <div style={{ height: "100%", width: `${Math.round(market.yes_prob * 100)}%`, background: "var(--accent)", transition: "width 0.4s ease" }} />
         </div>
 
