@@ -444,17 +444,13 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", flex: 1 }}>
                     {entry.username}
                   </span>
-                  {/* bought/sold — fixed width so YES/NO column stays put */}
+                  {/* bought/sold — fixed width */}
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", minWidth: "6ch", textAlign: "right" }}>
                     {entry.is_sell ? "sold" : "bought"}
                   </span>
-                  {/* YES/NO — fixed 3ch */}
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)", minWidth: "3ch", textAlign: "right" }}>
-                    {entry.side ? "YES" : "NO"}
-                  </span>
-                  {/* ×qty — fixed width for up to ×10000 */}
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)", minWidth: "6ch", textAlign: "right" }}>
-                    ×{entry.quantity}
+                  {/* YES/NO ×qty — combined, fixed width for "YES ×10000" */}
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)", minWidth: "10ch", textAlign: "right" }}>
+                    {entry.side ? "YES" : "NO"} ×{entry.quantity}
                   </span>
                   {/* cost — fixed width for up to 9999.9 */}
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", minWidth: "6ch", textAlign: "right" }}>
