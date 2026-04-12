@@ -18,34 +18,76 @@ function VisualWelcome() {
   );
 }
 
-function VisualSides() {
+function VisualMarket() {
+  const yesPct = 28;
+  const noPct  = 72;
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      <div style={{ flex: 1, padding: "14px 8px", border: "2px solid var(--accent)", color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, textAlign: "center" }}>
-        YES 2.4×
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px" }}>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", margin: "0 0 10px", letterSpacing: "0.06em" }}>
+        EXAMPLE MARKET
+      </p>
+      <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 14px", lineHeight: 1.4 }}>
+        Finn ends his night gardening in rural Budapest
+      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>YES {yesPct}%</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--no)" }}>NO {noPct}%</span>
       </div>
-      <div style={{ flex: 1, padding: "14px 8px", border: "2px solid var(--no)", color: "var(--no)", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, textAlign: "center" }}>
-        NO 1.7×
+      <div style={{ height: 4, background: "var(--no)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${yesPct}%`, background: "var(--accent)" }} />
       </div>
     </div>
   );
 }
 
-function VisualOdds() {
+function VisualBuy() {
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em" }}>EXAMPLE</span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--accent)" }}>YES 3.2×</span>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", margin: "0 0 12px", letterSpacing: "0.06em" }}>
+        BUYING 10 YES SHARES AT 28%
+      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 13, marginBottom: 8 }}>
+        <span style={{ color: "var(--muted)" }}>you pay now</span>
+        <span style={{ color: "var(--text)", fontWeight: 700 }}>2.8 pts</span>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 13, marginBottom: 6 }}>
-        <span style={{ color: "var(--muted)" }}>you spend</span>
-        <span style={{ color: "var(--text)" }}>10 pts</span>
+      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 13, marginBottom: 8 }}>
+        <span style={{ color: "var(--muted)" }}>if YES wins → you get</span>
+        <span style={{ color: "var(--accent)", fontWeight: 700 }}>10 pts</span>
       </div>
+      <div style={{ height: 1, background: "var(--border)", margin: "8px 0" }} />
       <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 13 }}>
-        <span style={{ color: "var(--muted)" }}>if YES wins</span>
-        <span style={{ color: "var(--accent)", fontWeight: 700 }}>+32 pts</span>
+        <span style={{ color: "var(--muted)" }}>profit</span>
+        <span style={{ color: "var(--accent)", fontWeight: 700 }}>+7.2 pts</span>
       </div>
+    </div>
+  );
+}
+
+function VisualProb() {
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px" }}>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", margin: "0 0 12px", letterSpacing: "0.06em" }}>
+        HOW THE % MOVES
+      </p>
+      {[
+        { label: "market opens", yes: 50, no: 50 },
+        { label: "people buy YES", yes: 65, no: 35 },
+        { label: "people buy NO", yes: 40, no: 60 },
+      ].map(({ label, yes, no }) => (
+        <div key={label} style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)" }}>{label}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>
+              <span style={{ color: "var(--accent)" }}>YES {yes}%</span>
+              <span style={{ color: "var(--muted)" }}> · </span>
+              <span style={{ color: "var(--no)" }}>NO {no}%</span>
+            </span>
+          </div>
+          <div style={{ height: 3, background: "var(--no)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${yes}%`, background: "var(--accent)", transition: "width 0.3s ease" }} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -57,24 +99,6 @@ function VisualPoints({ startingPts }: { startingPts: number }) {
         {startingPts.toFixed(0)}
       </span>
       <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, color: "var(--muted)" }}>pts</span>
-    </div>
-  );
-}
-
-function VisualReady() {
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap" }}>
-        {["LIVE ODDS", "REAL-TIME", "CHAT", "TROPHIES"].map(tag => (
-          <span key={tag} style={{
-            fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em",
-            color: "var(--accent)", border: "1px solid var(--accent)",
-            padding: "4px 8px",
-          }}>
-            {tag}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
@@ -91,33 +115,33 @@ type Slide = {
 const SLIDES: Slide[] = [
   {
     tag: "WELCOME",
-    title: "Prediction markets\nfor your group.",
-    body: "Bet points on anything with a YES or NO outcome. Read the crowd. Outsmart your friends.",
+    title: "Bet on anything.\nWith your friends.",
+    body: "odds. is a prediction market. Each market is a yes/no question — you bet points on the outcome and win more back if you're right.",
     visual: () => <VisualWelcome />,
   },
   {
-    tag: "MARKETS",
-    title: "Pick a side.",
-    body: "Every market has a YES and NO. Buy shares before it resolves. Odds shift as people trade — move fast.",
-    visual: () => <VisualSides />,
+    tag: "THE MARKET",
+    title: "The % is what\neveryone thinks.",
+    body: "YES 28% means the group collectively thinks there's a 28% chance it happens. You can agree with that — or bet against it.",
+    visual: () => <VisualMarket />,
   },
   {
-    tag: "ODDS",
-    title: "Bigger odds =\nbigger payout.",
-    body: "The number next to YES or NO is your multiplier. Long shots pay more. Favourites pay less. Simple.",
-    visual: () => <VisualOdds />,
+    tag: "HOW YOU WIN",
+    title: "Each share pays\n1 pt if you're right.",
+    body: "Buy 10 YES shares at 28% → costs ~2.8 pts. If YES wins, you receive 10 pts back. Profit: +7.2 pts. Low % = cheap shares = big upside.",
+    visual: () => <VisualBuy />,
   },
   {
-    tag: "POINTS",
-    title: "This is your stake.",
-    body: "Spend points to buy. Win them back — and more — when you're right. Don't go broke.",
+    tag: "LIVE ODDS",
+    title: "The % shifts as\npeople trade.",
+    body: "Every trade moves the odds. Buy YES and the YES% goes up, making it pricier for the next person. Get in early on the right side.",
+    visual: () => <VisualProb />,
+  },
+  {
+    tag: "YOUR STAKE",
+    title: "Don't go broke.",
+    body: "These are your points for the whole game. Spend them wisely — you can't earn more, only win them from markets. Top 3 on each settlement earn a trophy.",
     visual: (pts) => <VisualPoints startingPts={pts} />,
-  },
-  {
-    tag: "YOU'RE IN",
-    title: "May the best\npredictor win.",
-    body: "Odds update live. Chat on every market. Trophies go to the top 3 on each settlement.",
-    visual: () => <VisualReady />,
   },
 ];
 
@@ -186,7 +210,6 @@ export default function OnboardingModal({ startingPts, onDone }: Props) {
 
         {/* Dots + actions */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          {/* Dot indicators */}
           <div style={{ display: "flex", gap: 6 }}>
             {SLIDES.map((_, i) => (
               <div
