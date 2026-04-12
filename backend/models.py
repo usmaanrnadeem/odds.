@@ -5,7 +5,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-VALID_TOKENS = Literal["wizard", "rocket", "fox", "knight", "shark", "bull", "ghost", "dragon"]
+VALID_TOKENS = Literal["wizard", "rocket", "fox", "knight", "shark", "bull", "ghost", "dragon", "p_ati", "p_finn", "p_ritz", "p_esele", "p_nugith", "p_alex", "p_usmaan"]
 VALID_RARITY = Literal["legendary", "rare", "common"]
 
 
