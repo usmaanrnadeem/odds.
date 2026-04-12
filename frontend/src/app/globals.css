@@ -49,7 +49,7 @@ html, body {
 .nav-inner {
   max-width: 480px;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 20px;
   height: 52px;
   display: flex;
   align-items: center;
@@ -59,7 +59,7 @@ html, body {
 .page-content {
   max-width: 480px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 24px 20px;
 }
 @media (min-width: 640px) {
   .nav-inner  { max-width: 800px; padding: 0 32px; }
