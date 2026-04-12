@@ -46,7 +46,7 @@ function RegisterPageInner() {
     setError("");
     setBusy(true);
     try {
-      const u = await api.register(username, tokenKey);
+      const u = await api.register(username.trim(), tokenKey);
       if (u.access_token) tokenStore.set(u.access_token);
       localStorage.removeItem("onboarding_v1_seen");
       await refresh();
