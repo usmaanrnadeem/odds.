@@ -439,18 +439,25 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>no trades yet</p>
               )}
               {feed.map(entry => (
-                <div key={entry.trade_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                <div key={entry.trade_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
                   <Token tokenKey={entry.token_key as TokenKey} size={24} />
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", flex: 1 }}>
                     {entry.username}
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)" }}>
+                  {/* bought/sold — fixed width so YES/NO column stays put */}
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", minWidth: "6ch", textAlign: "right" }}>
                     {entry.is_sell ? "sold" : "bought"}
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)" }}>
-                    {entry.side ? "YES" : "NO"} ×{entry.quantity}
+                  {/* YES/NO — fixed 3ch */}
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)", minWidth: "3ch", textAlign: "right" }}>
+                    {entry.side ? "YES" : "NO"}
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>
+                  {/* ×qty — fixed width for up to ×10000 */}
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: entry.side ? "var(--accent)" : "var(--no)", minWidth: "6ch", textAlign: "right" }}>
+                    ×{entry.quantity}
+                  </span>
+                  {/* cost — fixed width for up to 9999.9 */}
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", minWidth: "6ch", textAlign: "right" }}>
                     {entry.cost.toFixed(1)}
                   </span>
                 </div>
