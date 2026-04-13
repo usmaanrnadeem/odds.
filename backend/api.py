@@ -576,6 +576,19 @@ async def send_group_chat(body: MessageIn, current: Annotated[dict, Depends(get_
                     token_key=user_row["token_key"], content=body.content,
                     created_at=msg["created_at"].isoformat()).model_dump()
     )
+    # Notify all other group members
+    preview = body.content if len(body.content) <= 40 else body.content[:37] + "..."
+    async def _fire_group_chat_notifs() -> None:
+        members = await pool.fetch(
+            "SELECT user_id FROM group_memberships WHERE group_id = $1 AND user_id != $2",
+            group_id, current["user_id"],
+        )
+        for m in members:
+            await _push_notification(
+                pool, m["user_id"], "chat", None, "Group chat",
+                user_row["username"], f"{user_row['username']}: {preview}",
+            )
+    asyncio.create_task(_fire_group_chat_notifs())
     return out
 
 
