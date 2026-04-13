@@ -18,21 +18,22 @@ export const PALETTE: Record<string, string> = {
 };
 
 export type StandardTokenKey = "wizard" | "rocket" | "fox" | "knight" | "shark" | "bull" | "ghost" | "dragon";
-export type CustomTokenKey = "p_ati" | "p_finn" | "p_ritz" | "p_esele" | "p_nugith" | "p_alex" | "p_usmaan";
+export type CustomTokenKey = "p_ati" | "p_finn" | "p_ritz" | "p_esele" | "p_nugith" | "p_alex" | "p_usmaan" | "p_chethan";
 export type TokenKey = StandardTokenKey | CustomTokenKey;
 
 export const CUSTOM_TOKEN_KEYS: CustomTokenKey[] = [
-  "p_ati", "p_finn", "p_ritz", "p_esele", "p_nugith", "p_alex", "p_usmaan",
+  "p_ati", "p_finn", "p_ritz", "p_esele", "p_nugith", "p_alex", "p_usmaan", "p_chethan",
 ];
 
 export const CUSTOM_TOKEN_LABELS: Record<CustomTokenKey, string> = {
-  p_ati:    "ati",
-  p_finn:   "finn",
-  p_ritz:   "ritz",
-  p_esele:  "esele",
-  p_nugith: "nugith",
-  p_alex:   "alex",
-  p_usmaan: "usmaan",
+  p_ati:     "ati",
+  p_finn:    "finn",
+  p_ritz:    "ritz",
+  p_esele:   "esele",
+  p_nugith:  "nugith",
+  p_alex:    "alex",
+  p_usmaan:  "usmaan",
+  p_chethan: "chethan",
 };
 
 export function isCustomToken(key: TokenKey): key is CustomTokenKey {
