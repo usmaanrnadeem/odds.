@@ -50,7 +50,7 @@ export async function subscribePush(): Promise<boolean> {
 
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(public_key),
+      applicationServerKey: urlBase64ToUint8Array(public_key) as unknown as ArrayBuffer,
     });
 
     await api.subscribePush(sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } });
