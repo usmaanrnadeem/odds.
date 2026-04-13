@@ -135,6 +135,13 @@ export const api = {
   notifications: () => req<Notification[]>("/notifications"),
   markNotificationsRead: () => req<{ ok: boolean }>("/notifications/read", { method: "POST" }),
 
+  // Push
+  vapidPublicKey: () => req<{ public_key: string }>("/push/vapid-public-key"),
+  subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    req<{ ok: boolean }>("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
+  unsubscribePush: (endpoint: string) =>
+    req<{ ok: boolean }>("/push/subscribe", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
+
   topupUser: (userId: number, amount: number) =>
     req<{ user_id: number; username: string; new_balance: number }>(
       `/admin/users/${userId}/topup?amount=${amount}`,

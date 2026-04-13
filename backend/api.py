@@ -20,6 +20,7 @@ from .auth import (
 )
 from .bots import start_bots, stop_bots
 from .db import close_pool, get_pool, init_pool
+from .push import send_push_to_user, VAPID_PUBLIC_KEY
 from . import market_cache
 from .models import (
     BuyRequest,
@@ -56,9 +57,9 @@ logger = logging.getLogger(__name__)
 # ── Notifications ────────────────────────────────────────────────────────────
 
 async def _push_notification(pool: asyncpg.Pool, user_id: int, notif_type: str,
-                              market_id: int, market_title: str,
-                              actor_username: str, content: str) -> None:
-    """Insert one notification row and broadcast it over WS to that user."""
+                              market_id: Optional[int], market_title: Optional[str],
+                              actor_username: Optional[str], content: str) -> None:
+    """Insert one notification row, broadcast over WS, and send a device push."""
     row = await pool.fetchrow(
         """INSERT INTO notifications (user_id, type, market_id, market_title, actor_username, content)
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at""",
@@ -78,6 +79,11 @@ async def _push_notification(pool: asyncpg.Pool, user_id: int, notif_type: str,
         manager.broadcast(
             WSNotificationEvent(user_id=user_id, notification=out.model_dump()).model_dump()
         )
+    )
+    # Device push (fire-and-forget)
+    url = f"/markets/{market_id}" if market_id else "/"
+    asyncio.create_task(
+        send_push_to_user(pool, user_id, "odds.", content, url)
     )
 
 
@@ -1049,6 +1055,43 @@ async def mark_notifications_read(current: Annotated[dict, Depends(get_current_u
         "UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE",
         current["user_id"],
     )
+    return {"ok": True}
+
+
+# ── Push subscriptions ────────────────────────────────────────────────────────
+
+@app.get("/push/vapid-public-key")
+async def get_vapid_public_key():
+    return {"public_key": VAPID_PUBLIC_KEY}
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(body: dict, current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    endpoint = body.get("endpoint")
+    keys     = body.get("keys", {})
+    p256dh   = keys.get("p256dh")
+    auth     = keys.get("auth")
+    if not endpoint or not p256dh or not auth:
+        raise HTTPException(status_code=400, detail="Invalid subscription")
+    await pool.execute(
+        """INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (endpoint) DO UPDATE SET user_id=$1, p256dh=$3, auth=$4""",
+        current["user_id"], endpoint, p256dh, auth,
+    )
+    return {"ok": True}
+
+
+@app.delete("/push/subscribe")
+async def push_unsubscribe(body: dict, current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    endpoint = body.get("endpoint")
+    if endpoint:
+        await pool.execute(
+            "DELETE FROM push_subscriptions WHERE user_id=$1 AND endpoint=$2",
+            current["user_id"], endpoint,
+        )
     return {"ok": True}
 
 
