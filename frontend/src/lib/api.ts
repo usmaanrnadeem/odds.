@@ -131,6 +131,10 @@ export const api = {
   sendGroupChat: (content: string) =>
     req<ChatMessage>("/groups/me/chat", { method: "POST", body: JSON.stringify({ content }) }),
 
+  // Notifications
+  notifications: () => req<Notification[]>("/notifications"),
+  markNotificationsRead: () => req<{ ok: boolean }>("/notifications/read", { method: "POST" }),
+
   topupUser: (userId: number, amount: number) =>
     req<{ user_id: number; username: string; new_balance: number }>(
       `/admin/users/${userId}/topup?amount=${amount}`,
@@ -277,7 +281,24 @@ export type WSChatEvent = {
   created_at: string;
 };
 
-export type WSEvent = WSTradeEvent | WSSettlementEvent | WSMarketCreatedEvent | WSBalanceUpdateEvent | WSChatEvent;
+export type Notification = {
+  id: number;
+  type: "trade" | "chat" | "settlement";
+  market_id: number | null;
+  market_title: string | null;
+  actor_username: string | null;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type WSNotificationEvent = {
+  type: "notification";
+  user_id: number;
+  notification: Notification;
+};
+
+export type WSEvent = WSTradeEvent | WSSettlementEvent | WSMarketCreatedEvent | WSBalanceUpdateEvent | WSChatEvent | WSNotificationEvent;
 
 export type ChatMessage = {
   message_id: number;

@@ -210,6 +210,23 @@ class WSTradeEvent(BaseModel):
     feed_entry: FeedEntry
 
 
+class NotificationOut(BaseModel):
+    id: int
+    type: str          # 'trade' | 'chat' | 'settlement'
+    market_id: Optional[int]
+    market_title: Optional[str]
+    actor_username: Optional[str]
+    content: str
+    is_read: bool
+    created_at: str
+
+
+class WSNotificationEvent(BaseModel):
+    type: Literal["notification"] = "notification"
+    user_id: int
+    notification: dict   # NotificationOut as dict
+
+
 class WSSettlementEvent(BaseModel):
     type: Literal["settlement"] = "settlement"
     market_id: int

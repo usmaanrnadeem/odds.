@@ -40,15 +40,60 @@ from .models import (
     TrophyOut,
     TradeOut,
     UserOut,
+    NotificationOut,
     WSBalanceUpdateEvent,
     WSChatEvent,
     WSMarketCreatedEvent,
+    WSNotificationEvent,
     WSSettlementEvent,
     WSTradeEvent,
 )
 from .ws import manager
 
 logger = logging.getLogger(__name__)
+
+
+# ── Notifications ────────────────────────────────────────────────────────────
+
+async def _push_notification(pool: asyncpg.Pool, user_id: int, notif_type: str,
+                              market_id: int, market_title: str,
+                              actor_username: str, content: str) -> None:
+    """Insert one notification row and broadcast it over WS to that user."""
+    row = await pool.fetchrow(
+        """INSERT INTO notifications (user_id, type, market_id, market_title, actor_username, content)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at""",
+        user_id, notif_type, market_id, market_title, actor_username, content,
+    )
+    out = NotificationOut(
+        id=row["id"],
+        type=notif_type,
+        market_id=market_id,
+        market_title=market_title,
+        actor_username=actor_username,
+        content=content,
+        is_read=False,
+        created_at=row["created_at"].isoformat(),
+    )
+    asyncio.create_task(
+        manager.broadcast(
+            WSNotificationEvent(user_id=user_id, notification=out.model_dump()).model_dump()
+        )
+    )
+
+
+async def _notify_participants(pool: asyncpg.Pool, market_id: int, market_title: str,
+                                actor_user_id: int, actor_username: str,
+                                notif_type: str, content: str) -> None:
+    """Notify all users who have traded in this market (excluding the actor)."""
+    rows = await pool.fetch(
+        """SELECT DISTINCT userid FROM trades
+           WHERE marketid = $1 AND userid != $2 AND userid IS NOT NULL AND is_bot = FALSE""",
+        market_id, actor_user_id,
+    )
+    for r in rows:
+        asyncio.create_task(
+            _push_notification(pool, r["userid"], notif_type, market_id, market_title, actor_username, content)
+        )
 
 
 # ── Auto-refund ───────────────────────────────────────────────
@@ -478,6 +523,15 @@ async def send_market_chat(market_id: int, body: MessageIn, current: Annotated[d
                     token_key=user_row["token_key"], content=body.content,
                     created_at=msg["created_at"].isoformat()).model_dump()
     )
+    # Notify market participants (fire-and-forget)
+    preview = body.content if len(body.content) <= 40 else body.content[:37] + "..."
+    asyncio.create_task(
+        _notify_participants(
+            pool, market_id, row["title"],
+            current["user_id"], user_row["username"],
+            "chat", f"{user_row['username']}: {preview}",
+        )
+    )
     return out
 
 
@@ -767,6 +821,17 @@ async def buy(
         )
     )
 
+    async def _fire_trade_notifs() -> None:
+        title_row = await pool.fetchrow("SELECT title FROM markets WHERE marketid = $1", market_id)
+        if title_row:
+            side_label = "YES" if body.side else "NO"
+            await _notify_participants(
+                pool, market_id, title_row["title"],
+                current["user_id"], row["username"],
+                "trade", f"{row['username']} bought {side_label} ×{body.quantity}",
+            )
+    asyncio.create_task(_fire_trade_notifs())
+
     return TradeOut(
         trade_id=row["tradeid"],
         market_id=market_id,
@@ -918,6 +983,17 @@ async def sell(
         )
     )
 
+    async def _fire_sell_notifs() -> None:
+        title_row = await pool.fetchrow("SELECT title FROM markets WHERE marketid = $1", market_id)
+        if title_row:
+            side_label = "YES" if body.side else "NO"
+            await _notify_participants(
+                pool, market_id, title_row["title"],
+                current["user_id"], row["username"],
+                "trade", f"{row['username']} sold {side_label} ×{body.quantity}",
+            )
+    asyncio.create_task(_fire_sell_notifs())
+
     return TradeOut(
         trade_id=row["tradeid"],
         market_id=market_id,
@@ -929,6 +1005,38 @@ async def sell(
         new_yes_prob=yes_prob,
         new_balance=new_balance,
     )
+
+
+# ── Notifications ────────────────────────────────────────────────────────────
+
+@app.get("/notifications", response_model=list[NotificationOut])
+async def get_notifications(current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    rows = await pool.fetch(
+        """SELECT id, type, market_id, market_title, actor_username, content, is_read, created_at
+           FROM notifications WHERE user_id = $1
+           ORDER BY created_at DESC LIMIT 50""",
+        current["user_id"],
+    )
+    return [
+        NotificationOut(
+            id=r["id"], type=r["type"], market_id=r["market_id"],
+            market_title=r["market_title"], actor_username=r["actor_username"],
+            content=r["content"], is_read=r["is_read"],
+            created_at=r["created_at"].isoformat(),
+        )
+        for r in rows
+    ]
+
+
+@app.post("/notifications/read")
+async def mark_notifications_read(current: Annotated[dict, Depends(get_current_user)]):
+    pool = get_pool()
+    await pool.execute(
+        "UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE",
+        current["user_id"],
+    )
+    return {"ok": True}
 
 
 # ── Leaderboard ──────────────────────────────────────────────
@@ -1247,6 +1355,21 @@ async def settle_market(
             price_arc=arc,
         ).model_dump()
     )
+
+    # Notify all participants about settlement
+    side_label = "YES" if body.side else "NO"
+    async def _fire_settlement_notifs() -> None:
+        rows = await pool.fetch(
+            """SELECT DISTINCT userid FROM trades
+               WHERE marketid = $1 AND userid IS NOT NULL AND is_bot = FALSE""",
+            market_id,
+        )
+        for r in rows:
+            await _push_notification(
+                pool, r["userid"], "settlement", market_id, market["title"],
+                None, f"Settled {side_label} — {market['title']}",
+            )
+    asyncio.create_task(_fire_settlement_notifs())
 
     return {"ok": True, "settled_side": body.side, "rarity": rarity, "podium": podium}
 

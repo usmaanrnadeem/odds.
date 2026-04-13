@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useUser } from "@/lib/auth";
 import Token from "./Token";
 import { TokenKey } from "@/lib/tokens";
+import NotificationBell from "./NotificationBell";
 
 // static links — trophies href is filled in dynamically per-user
 const STATIC_LINKS = [
@@ -95,6 +96,9 @@ export default function Nav() {
             </Link>
           )}
         </div>
+
+        {/* Notification bell */}
+        <NotificationBell />
 
         {/* User — points + token link to profile */}
         <Link
