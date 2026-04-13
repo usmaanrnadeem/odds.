@@ -456,6 +456,14 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", minWidth: "6ch", textAlign: "right" }}>
                     {entry.cost.toFixed(1)}
                   </span>
+                  {/* timestamp */}
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", minWidth: "10ch", textAlign: "right", opacity: 0.6 }}>
+                    {(() => {
+                      const d = new Date(entry.timestamp);
+                      return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + " " +
+                        d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+                    })()}
+                  </span>
                 </div>
               ))}
             </>
