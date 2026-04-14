@@ -30,17 +30,8 @@ export default function LeaderboardPage() {
     }).finally(() => setFetching(false));
 
     const disconnect = connectWS((event: WSEvent) => {
-      if (event.type === "balance_update") {
-        setEntries(prev => {
-          const updated = prev.map(e =>
-            e.user_id === event.user_id ? { ...e, points: event.new_balance } : e
-          );
-          return updated
-            .sort((a, b) => b.points - a.points)
-            .map((e, i) => ({ ...e, rank: i + 1 }));
-        });
-      }
-      if (event.type === "settlement") {
+      // Re-fetch on trade or settlement so live_points (mark-to-market) stays accurate
+      if (event.type === "trade" || event.type === "settlement") {
         api.leaderboard().then(setEntries);
       }
     });
@@ -127,12 +118,17 @@ export default function LeaderboardPage() {
                     </p>
                   </div>
 
-                  <span style={{
-                    fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700,
-                    color: e.rank === 1 ? "var(--accent)" : "var(--text)",
-                  }}>
-                    {e.points.toFixed(0)}
-                  </span>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{
+                      fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700,
+                      color: e.rank === 1 ? "var(--accent)" : "var(--text)",
+                    }}>
+                      {e.points.toFixed(0)}
+                    </span>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted)", opacity: 0.6, marginTop: 1 }}>
+                      live
+                    </div>
+                  </div>
                 </div>
               </Link>
             ))}

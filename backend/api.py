@@ -1104,53 +1104,77 @@ async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
     if not group_id and not current["is_admin"]:
         return []
 
-    if current["is_admin"] and not group_id:
-        # Master admin with no group: show all non-admin users
-        rows = await pool.fetch(
-            """
-            SELECT u.userID, u.username, u.token_key, u.points,
-                   COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE) AS markets_participated,
-                   COUNT(DISTINCT th.marketID)                                  AS markets_won
-            FROM users u
-            LEFT JOIN trades t  ON t.userID = u.userID
-            LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
-            WHERE u.is_admin = FALSE
-            GROUP BY u.userID
-            ORDER BY u.points DESC
-            """
-        )
-    else:
-        rows = await pool.fetch(
-            """
-            SELECT u.userID, u.username, u.token_key, u.points,
-                   COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE) AS markets_participated,
-                   COUNT(DISTINCT th.marketID)                                  AS markets_won
-            FROM users u
-            JOIN group_memberships gm ON gm.user_id = u.userid AND gm.group_id = $1
-            LEFT JOIN trades t  ON t.userID = u.userID AND t.is_bot = FALSE
-            LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
-            GROUP BY u.userID
-            ORDER BY u.points DESC
-            """,
-            group_id,
-        )
+    user_filter = "WHERE u.is_admin = FALSE" if (current["is_admin"] and not group_id) else ""
+    group_join  = "JOIN group_memberships gm ON gm.user_id = u.userid AND gm.group_id = $1" if group_id else ""
+    args        = (group_id,) if group_id else ()
+
+    rows = await pool.fetch(
+        f"""
+        SELECT u.userID, u.username, u.token_key, u.points,
+               COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE) AS markets_participated,
+               COUNT(DISTINCT th.marketID)                                  AS markets_won
+        FROM users u
+        {group_join}
+        LEFT JOIN trades t    ON t.userID = u.userID AND t.is_bot = FALSE
+        LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
+        {user_filter}
+        GROUP BY u.userID
+        """,
+        *args,
+    )
+
+    # Mark-to-market: compute actual sell value of open positions using LMSR cost_sell
+    # (qty × prob is wrong — the pricing curve means selling moves the price)
+    pos_rows = await pool.fetch(
+        f"""
+        SELECT p.userid, p.yespos, p.nopos,
+               m.b, m.outstandingyes, m.outstandingno
+        FROM positions p
+        JOIN markets m ON m.marketid = p.marketid AND m.status = 'open'
+        {"JOIN group_memberships gm2 ON gm2.user_id = p.userid AND gm2.group_id = $1" if group_id else ""}
+        """,
+        *args,
+    )
+
+    mtm: dict[int, float] = {}
+    for p in pos_rows:
+        uid   = p["userid"]
+        b     = float(p["b"])
+        yes_q = float(p["outstandingyes"])
+        no_q  = float(p["outstandingno"])
+        yp    = float(p["yespos"])
+        np_   = float(p["nopos"])
+        val   = 0.0
+        if yp > 0:
+            val += lmsr.cost_sell(b, yes_q, no_q, yp, True)
+        if np_ > 0:
+            val += lmsr.cost_sell(b, yes_q, no_q, np_, False)
+        mtm[uid] = mtm.get(uid, 0.0) + val
+
     result = []
-    for i, r in enumerate(rows):
+    for r in rows:
+        uid          = r["userid"]
+        points       = float(r["points"])
+        live_points  = points + mtm.get(uid, 0.0)
         participated = int(r["markets_participated"] or 0)
-        won = int(r["markets_won"] or 0)
-        accuracy = (won / participated) if participated > 0 else 0.0
+        won          = int(r["markets_won"] or 0)
+        accuracy     = (won / participated) if participated > 0 else 0.0
         result.append(
             LeaderboardEntry(
-                rank=i + 1,
-                user_id=r["userid"],
+                rank=0,  # assigned after sort
+                user_id=uid,
                 username=r["username"],
                 token_key=r["token_key"],
-                points=float(r["points"]),
+                points=round(live_points, 1),
                 markets_participated=participated,
                 markets_won=won,
                 accuracy=accuracy,
             )
         )
+
+    result.sort(key=lambda e: e.points, reverse=True)
+    for i, e in enumerate(result):
+        e.rank = i + 1
     return result
 
 
