@@ -17,6 +17,12 @@ const RARITY = {
 
 const RANK_LABEL: Record<number, string> = { 1: "1ST", 2: "2ND", 3: "3RD" };
 
+const TITLE_DESC: Record<string, string> = {
+  "The Oracle":      "called it first, before the odds moved",
+  "The Contrarian":  "bet against the crowd and won",
+  "The Degenerate":  "held through the chaos and came out ahead",
+};
+
 // ── Sparkline ─────────────────────────────────────────────────────────────
 
 function Sparkline({ data, width = 280, height = 48, color = "var(--accent)" }: {
@@ -141,13 +147,23 @@ function TrophyModal({ trophy, tokenKey, onClose }: {
             </p>
           </div>
 
-          {/* Title */}
-          <p style={{
-            fontFamily: "var(--font-mono)", fontSize: 12, color: r.color,
-            textAlign: "center", margin: "0 0 14px", letterSpacing: "0.08em",
-          }}>
-            {trophy.title}
-          </p>
+          {/* Title + description */}
+          <div style={{ textAlign: "center", marginBottom: 14 }}>
+            <p style={{
+              fontFamily: "var(--font-mono)", fontSize: 12, color: r.color,
+              margin: "0 0 4px", letterSpacing: "0.08em",
+            }}>
+              {trophy.title}
+            </p>
+            {TITLE_DESC[trophy.title] && (
+              <p style={{
+                fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)",
+                margin: 0, lineHeight: 1.5,
+              }}>
+                {TITLE_DESC[trophy.title]}
+              </p>
+            )}
+          </div>
 
           {/* Market name */}
           <p style={{
