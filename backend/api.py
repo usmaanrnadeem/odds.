@@ -1354,13 +1354,18 @@ async def settle_market(
                 market_id,
             )
 
-            # Compute net profit per user
+            # Compute net profit per user — only keep those who:
+            # 1. Held a winning position at settlement (payout > 0)
+            # 2. Made a net profit (profit > 0)
+            # This means: bet correctly AND profited — no consolation trophies
             scored = []
             for r in profits:
                 payout       = float(r["yespos"]) if body.side else float(r["nopos"])
                 total_bought = float(r["total_bought"])
                 total_sold   = float(r["total_sold"])
                 net = payout + total_sold - total_bought
+                if payout <= 0 or net <= 0:
+                    continue  # wrong side, or didn't profit
                 scored.append({
                     "user_id": r["userid"],
                     "username": r["username"],
