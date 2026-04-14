@@ -1333,30 +1333,34 @@ async def settle_market(
                     market_id,
                 )
 
-            # Compute profit per user (payout - cost)
+            # Compute profit per user:
+            #   profit = settlement_payout + sell_proceeds - buy_costs
+            # Sell costs in the trades table are proceeds (positive cash received),
+            # so we subtract buys and add sells across all sides.
             profits = await con.fetch(
                 """
                 SELECT
                     u.userID, u.username, u.token_key,
                     COALESCE(p.yesPos, 0) AS yesPos,
                     COALESCE(p.noPos, 0)  AS noPos,
-                    COALESCE(SUM(CASE WHEN t.side = $2 THEN t.cost ELSE 0 END), 0) AS spent,
-                    COALESCE(SUM(CASE WHEN t.side != $2 THEN t.cost ELSE 0 END), 0) AS spent_other
+                    COALESCE(SUM(CASE WHEN t.is_sell = FALSE THEN t.cost ELSE 0 END), 0) AS total_bought,
+                    COALESCE(SUM(CASE WHEN t.is_sell = TRUE  THEN t.cost ELSE 0 END), 0) AS total_sold
                 FROM users u
                 LEFT JOIN positions p ON p.userID = u.userID AND p.marketID = $1
                 LEFT JOIN trades   t ON t.userID = u.userID AND t.marketID = $1 AND t.is_bot = FALSE
                 WHERE p.marketID = $1
                 GROUP BY u.userID, u.username, u.token_key, p.yesPos, p.noPos
                 """,
-                market_id, body.side,
+                market_id,
             )
 
             # Compute net profit per user
             scored = []
             for r in profits:
-                payout = float(r["yespos"]) if body.side else float(r["nopos"])
-                cost = float(r["spent"])
-                net = payout - cost
+                payout       = float(r["yespos"]) if body.side else float(r["nopos"])
+                total_bought = float(r["total_bought"])
+                total_sold   = float(r["total_sold"])
+                net = payout + total_sold - total_bought
                 scored.append({
                     "user_id": r["userid"],
                     "username": r["username"],
@@ -1393,7 +1397,8 @@ async def settle_market(
                     """
                     INSERT INTO trophies (userID, marketID, rank, profit, title, rarity)
                     VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT (userID, marketID) DO NOTHING
+                    ON CONFLICT (userID, marketID) DO UPDATE
+                        SET rank=$3, profit=$4, title=$5, rarity=$6
                     """,
                     player["user_id"], market_id, rank_idx + 1,
                     player["profit"], title, rarity,
