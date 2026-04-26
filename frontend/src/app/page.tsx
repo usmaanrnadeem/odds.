@@ -135,6 +135,7 @@ export default function HomePage() {
   const [positions,  setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
   const [fetching,   setFetching]  = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [tab, setTab] = useState<"open" | "settled">("open");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -204,9 +205,37 @@ export default function HomePage() {
           </button>
         </div>
 
+        {!fetching && settled.length > 0 && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+            {(["open", "settled"] as const).map(t => {
+              const isActive = tab === t;
+              const accent = t === "open" ? "var(--accent)" : "var(--no)";
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10,
+                    letterSpacing: "0.1em",
+                    padding: "4px 10px",
+                    border: "1px solid",
+                    borderColor: isActive ? accent : "var(--border)",
+                    background: isActive ? accent : "transparent",
+                    color: isActive ? "#000" : "var(--muted)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {t === "open" ? "LIVE" : "SETTLED"}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {fetching ? (
           <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>loading…</p>
-        ) : (
+        ) : tab === "open" ? (
           <>
             {open.length === 0 && (
               <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>
@@ -214,6 +243,10 @@ export default function HomePage() {
               </p>
             )}
             {open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
+          </>
+        ) : (
+          <>
+            {settled.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
           </>
         )}
       </main>
