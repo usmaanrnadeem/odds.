@@ -79,9 +79,10 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 @media (max-width: 639px) {
   input, textarea, select { font-size: 16px !important; }
 
-  /* Nav: hide username text, trophies link, and markets link (logo already goes home) */
+  /* Nav: hide username text, trophies link, markets link, and league link on mobile */
   .nav-username { display: none !important; }
   .nav-trophies { display: none !important; }
   .nav-markets  { display: none !important; }
+  .nav-league   { display: none !important; }
   .nav-links    { gap: 16px !important; }
 }

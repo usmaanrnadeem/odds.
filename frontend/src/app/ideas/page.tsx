@@ -290,17 +290,19 @@ export default function IdeasPage() {
           </p>
           {fetching ? (
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>loading…</p>
-          ) : (
-            (isAdmin ? ideas : myIdeas).length === 0 ? (
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
-                no ideas yet — be the first to pitch one
-              </p>
-            ) : (
-              (isAdmin ? ideas : myIdeas).filter(i => i.status !== "pending" || !isAdmin).map(idea => (
-                <IdeaCard key={idea.idea_id} idea={idea} />
-              ))
-            )
-          )}
+          ) : (() => {
+            const displayed = (isAdmin ? ideas : myIdeas).filter(i => i.status !== "pending" || !isAdmin);
+            if (displayed.length === 0) {
+              return (
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>
+                  {isAdmin
+                    ? (ideas.length > 0 ? "all ideas are pending review" : "no ideas yet")
+                    : "no ideas yet — be the first to pitch one"}
+                </p>
+              );
+            }
+            return displayed.map(idea => <IdeaCard key={idea.idea_id} idea={idea} />);
+          })()}
         </section>
       </main>
     </>
