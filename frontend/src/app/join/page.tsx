@@ -40,20 +40,32 @@ function JoinPageInner() {
   // ── Manual join / create ─────────────────────────────────
   const [tab, setTab] = useState<Tab>("join");
 
-  const [joinName,     setJoinName]     = useState("");
-  const [joinPassword, setJoinPassword] = useState("");
-  const [createName,   setCreateName]   = useState("");
-  const [createPw,     setCreatePw]     = useState("");
-  const [createInvite, setCreateInvite] = useState("");
+  const [joinLink,   setJoinLink]   = useState("");
+  const [createName, setCreateName] = useState("");
 
   const [error, setError] = useState("");
   const [busy,  setBusy]  = useState(false);
+
+  function extractToken(input: string): string | null {
+    const trimmed = input.trim();
+    // Full URL: https://…/join?token=abc123
+    try {
+      const url = new URL(trimmed);
+      const t = url.searchParams.get("token");
+      if (t) return t;
+    } catch { /* not a URL */ }
+    // Raw token string (no spaces, not a URL)
+    if (!trimmed.includes(" ") && !trimmed.includes("/")) return trimmed;
+    return null;
+  }
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     setError(""); setBusy(true);
     try {
-      const g = await api.joinGroup(joinName, joinPassword);
+      const token = extractToken(joinLink);
+      if (!token) { setError("Paste the invite link you received from your group admin."); setBusy(false); return; }
+      const g = await api.joinGroupByToken(token);
       tokenStore.set(g.access_token);
       await refresh();
       router.push("/");
@@ -66,7 +78,7 @@ function JoinPageInner() {
     e.preventDefault();
     setError(""); setBusy(true);
     try {
-      const g = await api.createGroup(createName, createInvite);
+      const g = await api.createGroup(createName);
       tokenStore.set(g.access_token);
       await refresh();
       router.push("/");
@@ -140,7 +152,7 @@ function JoinPageInner() {
     );
   }
 
-  // ── Manual flow (create universe only) ──────────────────
+  // ── Manual flow (tab: join by invite OR create) ─────────
   return (
     <main className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--canvas)" }}>
       <div className="w-full max-w-sm">
@@ -149,19 +161,49 @@ function JoinPageInner() {
             odds.
           </span>
           <p className="mt-1 text-sm" style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>
-            create your group
+            join or start a group
           </p>
         </div>
 
-        <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0 }}>
-            you need an invite from the master admin to create a group
-          </p>
-          <input placeholder="group name" value={createName} onChange={e => setCreateName(e.target.value)} required minLength={2} maxLength={50} className="auth-input" />
-          <input placeholder="invite token" value={createInvite} onChange={e => setCreateInvite(e.target.value)} required className="auth-input" />
-          {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
-          <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "creating…" : "create group"}</button>
-        </form>
+        {/* Tab switcher */}
+        <div style={{ display: "flex", marginBottom: 24, borderBottom: "1px solid var(--border)" }}>
+          {(["join", "create"] as Tab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setError(""); }}
+              style={{
+                flex: 1, padding: "10px 0",
+                background: "none", border: "none",
+                fontFamily: "var(--font-mono)", fontSize: 12,
+                color: tab === t ? "var(--text)" : "var(--muted)",
+                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
+                cursor: "pointer", letterSpacing: "0.06em", textTransform: "uppercase",
+              }}
+            >
+              {t === "join" ? "join a group" : "create a group"}
+            </button>
+          ))}
+        </div>
+
+        {tab === "join" ? (
+          <form onSubmit={handleJoin} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0 }}>
+              paste the invite link your group admin shared with you.
+            </p>
+            <input placeholder="https://…/join?token=…" value={joinLink} onChange={e => setJoinLink(e.target.value)} required className="auth-input" />
+            {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
+            <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "joining…" : "join group"}</button>
+          </form>
+        ) : (
+          <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0 }}>
+              pick a name for your group. you&apos;ll be the admin — share the invite link with your crew.
+            </p>
+            <input placeholder="group name" value={createName} onChange={e => setCreateName(e.target.value)} required minLength={2} maxLength={50} className="auth-input" />
+            {error && <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--no)", textAlign: "center" }}>{error}</p>}
+            <button type="submit" disabled={busy} className="auth-btn-primary">{busy ? "creating…" : "create group"}</button>
+          </form>
+        )}
       </div>
 
       <style>{`

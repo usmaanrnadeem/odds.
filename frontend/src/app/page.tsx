@@ -2,12 +2,119 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, Market, WSEvent, connectWS } from "@/lib/api";
+import { api, Market, League, WSEvent, connectWS } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 import Token from "@/components/Token";
 import { TokenKey } from "@/lib/tokens";
 import OnboardingModal, { hasSeenOnboarding } from "@/components/OnboardingModal";
+
+function LandingPage() {
+  const FEATURES = [
+    { icon: "⚡", title: "Live odds", body: "Every bet moves the market in real time. Watch prices shift as your crew trades." },
+    { icon: "🏆", title: "Leagues & seasons", body: "Run weekly or biweekly seasons with your own markets. Crown a champion at the end." },
+    { icon: "💡", title: "Crowd-sourced markets", body: "Anyone can pitch a market idea. Admin picks the best ones and posts them." },
+    { icon: "🏅", title: "Trophies", body: "Win a market and earn a trophy card. The Oracle. The Contrarian. The Degenerate." },
+  ];
+
+  return (
+    <main style={{ background: "var(--canvas)", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "60px 20px" }}>
+      <div style={{ width: "100%", maxWidth: 480 }}>
+        {/* Hero */}
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 48, color: "var(--accent)", letterSpacing: "-0.02em" }}>
+            odds.
+          </span>
+          <p style={{ fontFamily: "var(--font-sans)", fontSize: 18, color: "var(--text)", margin: "16px 0 8px", lineHeight: 1.4 }}>
+            Prediction markets for your friend group.
+          </p>
+          <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, color: "var(--muted)", margin: "0 0 32px", lineHeight: 1.6 }}>
+            Bet on anything. Watch live odds. Run leagues. No real money — just bragging rights.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <a href="/register" style={{
+              display: "block", padding: "16px",
+              background: "var(--accent)", color: "#000",
+              fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
+              letterSpacing: "0.06em", textTransform: "uppercase",
+              textDecoration: "none", textAlign: "center",
+            }}>
+              create account
+            </a>
+            <a href="/login" style={{
+              display: "block", padding: "14px",
+              background: "transparent", border: "1px solid var(--border)", color: "var(--muted)",
+              fontFamily: "var(--font-mono)", fontSize: 13,
+              textDecoration: "none", textAlign: "center",
+            }}>
+              sign in
+            </a>
+          </div>
+        </div>
+
+        {/* How it works */}
+        <div style={{ marginBottom: 48 }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", marginBottom: 20 }}>
+            HOW IT WORKS
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {[
+              "Create an account and start a group (or join one via invite link).",
+              "Your admin creates markets — or the crew pitches ideas.",
+              "Everyone trades YES / NO with their starting points.",
+              "Admin settles each market. Winners earn trophies.",
+              "Run it as a one-off or set up a season with weekly drops.",
+            ].map((step, i) => (
+              <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--accent)", minWidth: 20 }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span style={{ fontFamily: "var(--font-sans)", fontSize: 14, color: "var(--muted)", lineHeight: 1.5 }}>
+                  {step}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Features */}
+        <div style={{ marginBottom: 48 }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", marginBottom: 20 }}>
+            FEATURES
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {FEATURES.map(f => (
+              <div key={f.title} style={{
+                padding: "16px 14px",
+                background: "var(--surface)", border: "1px solid var(--border)",
+              }}>
+                <div style={{ fontSize: 20, marginBottom: 8 }}>{f.icon}</div>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", margin: "0 0 6px", fontWeight: 600 }}>
+                  {f.title}
+                </p>
+                <p style={{ fontFamily: "var(--font-sans)", fontSize: 12, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+                  {f.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA repeat */}
+        <div style={{ textAlign: "center", paddingBottom: 40 }}>
+          <a href="/register" style={{
+            display: "inline-block", padding: "14px 32px",
+            background: "var(--accent)", color: "#000",
+            fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+            letterSpacing: "0.06em", textTransform: "uppercase", textDecoration: "none",
+          }}>
+            start for free
+          </a>
+        </div>
+      </div>
+    </main>
+  );
+}
 
 function fmtCloseTime(closesAt: string): string {
   const diff = new Date(closesAt).getTime() - Date.now();
@@ -135,11 +242,10 @@ export default function HomePage() {
   const [positions,  setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
   const [fetching,   setFetching]  = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [activeLeague, setActiveLeague] = useState<League | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
     if (!loading && user && !user.group_id && !user.is_admin) router.replace("/join");
-    // Show onboarding once — first time a user with a group hits the home page
     if (!loading && user?.group_id && !hasSeenOnboarding()) setShowOnboarding(true);
   }, [user, loading, router]);
 
@@ -153,6 +259,10 @@ export default function HomePage() {
       setPositions(new Map(pos.map(p => [p.market_id, p])));
     }).finally(() => setFetching(false));
 
+    if (user.group_id) {
+      api.currentLeague().then(setActiveLeague).catch(() => {});
+    }
+
     const disconnect = connectWS((event: WSEvent) => {
       if (event.type === "trade") {
         setMarkets(prev =>
@@ -164,12 +274,25 @@ export default function HomePage() {
         );
       }
       if (event.type === "settlement") {
-        setMarkets(prev => prev.filter(m => m.market_id !== event.market_id));
+        setMarkets(prev =>
+          prev.map(m =>
+            m.market_id === event.market_id
+              ? { ...m, status: "settled", settled_side: event.settled_side, settled_at: new Date().toISOString() }
+              : m
+          )
+        );
+      }
+      if (event.type === "market_created") {
+        api.market(event.market_id).then(m => {
+          setMarkets(prev => [m, ...prev.filter(x => x.market_id !== m.market_id)]);
+        }).catch(() => {});
       }
     });
     return disconnect;
   }, [user]);
 
+  // Show landing page to logged-out visitors
+  if (!loading && !user) return <LandingPage />;
   if (loading || !user) return null;
 
   const open    = markets.filter(m => m.status === "open");
@@ -204,6 +327,26 @@ export default function HomePage() {
           </button>
         </div>
 
+        {/* Active league banner */}
+        {activeLeague && (
+          <Link href="/league" style={{ textDecoration: "none", display: "block", marginBottom: 20 }}>
+            <div style={{
+              padding: "10px 14px",
+              background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", letterSpacing: "0.1em" }}>● LEAGUE</span>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)", margin: "2px 0 0" }}>
+                  {activeLeague.name}
+                </p>
+              </div>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>standings →</span>
+            </div>
+          </Link>
+        )}
+
         {fetching ? (
           <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>loading…</p>
         ) : (
@@ -214,6 +357,14 @@ export default function HomePage() {
               </p>
             )}
             {open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
+            {settled.length > 0 && (
+              <>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: "24px 0 12px" }}>
+                  SETTLED
+                </p>
+                {settled.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
+              </>
+            )}
           </>
         )}
       </main>

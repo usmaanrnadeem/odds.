@@ -1,17 +1,11 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError, tokenStore } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Token from "@/components/Token";
-import {
-  TOKEN_KEYS, TOKEN_LABELS, TokenKey,
-  CUSTOM_TOKEN_KEYS, CUSTOM_TOKEN_LABELS, CustomTokenKey,
-} from "@/lib/tokens";
-
-// Group ID that gets the custom friend tokens
-const CUSTOM_TOKEN_GROUP_ID = 1;
+import { TOKEN_KEYS, TOKEN_LABELS, TokenKey } from "@/lib/tokens";
 
 function RegisterPageInner() {
   const router       = useRouter();
@@ -19,27 +13,13 @@ function RegisterPageInner() {
   const token        = searchParams.get("token");
   const { refresh } = useUser();
 
-  const [username,    setUsername]    = useState("");
-  const [tokenKey,    setTokenKey]    = useState<TokenKey>("rocket");
-  const [error,       setError]       = useState("");
-  const [busy,        setBusy]        = useState(false);
-  const [useCustom,   setUseCustom]   = useState(false);
+  const [username, setUsername] = useState("");
+  const [tokenKey, setTokenKey] = useState<TokenKey>("rocket");
+  const [error,    setError]    = useState("");
+  const [busy,     setBusy]     = useState(false);
 
-  // If there's a join token, preview the group to decide which token set to show
-  useEffect(() => {
-    if (!token) return;
-    api.previewGroup(token)
-      .then(g => {
-        if (g.group_id === CUSTOM_TOKEN_GROUP_ID) {
-          setUseCustom(true);
-          setTokenKey("p_ati"); // default selection
-        }
-      })
-      .catch(() => {}); // silently ignore — fall back to standard tokens
-  }, [token]);
-
-  const displayKeys   = useCustom ? CUSTOM_TOKEN_KEYS   : TOKEN_KEYS;
-  const displayLabels = useCustom ? CUSTOM_TOKEN_LABELS  : TOKEN_LABELS;
+  const displayKeys   = TOKEN_KEYS;
+  const displayLabels = TOKEN_LABELS;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

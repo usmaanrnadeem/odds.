@@ -103,6 +103,26 @@ function VisualPoints({ startingPts }: { startingPts: number }) {
   );
 }
 
+function VisualLeague() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {[
+        { label: "🏆  league standings", sub: "compete over a full season" },
+        { label: "💡  pitch market ideas", sub: "admin picks the best ones" },
+        { label: "🏅  earn trophies", sub: "oracle · contrarian · degen" },
+      ].map(({ label, sub }) => (
+        <div key={label} style={{
+          padding: "10px 14px", background: "var(--surface)", border: "1px solid var(--border)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)" }}>{label}</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)" }}>{sub}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Slide definitions ─────────────────────────────────────────
 
 type Slide = {
@@ -142,6 +162,12 @@ const SLIDES: Slide[] = [
     title: "Don't go broke.",
     body: "These are your points for the whole game. Spend them wisely — you can't earn more, only win them from markets. Top 3 on each settlement earn a trophy.",
     visual: (pts) => <VisualPoints startingPts={pts} />,
+  },
+  {
+    tag: "LEAGUES & MORE",
+    title: "More than\njust a market.",
+    body: "Your group can run leagues — time-limited seasons with their own leaderboard. Pitch market ideas, vote with your wallet, earn trophies. Check the league tab.",
+    visual: () => <VisualLeague />,
   },
 ];
 

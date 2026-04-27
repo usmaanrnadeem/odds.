@@ -23,6 +23,7 @@ from .db import close_pool, get_pool, init_pool
 from .push import send_push_to_user, VAPID_PUBLIC_KEY
 from . import market_cache
 from .models import (
+    ApproveIdeaRequest,
     BuyRequest,
     FeedEntry,
     GroupCreate,
@@ -30,12 +31,18 @@ from .models import (
     GroupOut,
     InviteOut,
     LeaderboardEntry,
+    LeagueCreate,
+    LeagueLeaderboardEntry,
+    LeagueOut,
     LoginRequest,
     MarketCreate,
+    MarketIdeaCreate,
+    MarketIdeaOut,
     MarketOut,
     MessageIn,
     MessageOut,
     RegisterRequest,
+    RejectIdeaRequest,
     SellRequest,
     SettleRequest,
     TrophyOut,
@@ -251,8 +258,9 @@ def _market_out(row: asyncpg.Record) -> MarketOut:
         settled_side=row["settled_side"],
         closes_at=row["closes_at"].isoformat() if row["closes_at"] else None,
         subject_user_id=row["subject_user_id"],
-        subject_username=row["subject_username"],
-        subject_token_key=row["subject_token_key"],
+        subject_username=row.get("subject_username"),
+        subject_token_key=row.get("subject_token_key"),
+        league_id=row.get("league_id"),
     )
 
 
@@ -349,15 +357,9 @@ async def me(current: Annotated[dict, Depends(get_current_user)]):
 
 @app.post("/groups", response_model=GroupOut)
 async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_current_user)]):
-    """Create a new universe. Requires a master-admin invite token. Creator becomes group admin."""
+    """Create a new group. Open to any registered user. Creator becomes group admin."""
     pool = get_pool()
     async with pool.acquire() as con:
-        invite = await con.fetchrow("SELECT * FROM invite_tokens WHERE token = $1", body.invite_token)
-        if not invite or invite["used_at"] is not None:
-            raise HTTPException(status_code=400, detail="Invalid or already-used invite token")
-        if invite["expires_at"] < datetime.now(timezone.utc):
-            raise HTTPException(status_code=400, detail="Invite token expired")
-
         if await con.fetchrow("SELECT 1 FROM group_memberships WHERE user_id = $1", current["user_id"]):
             raise HTTPException(status_code=400, detail="You are already in a group")
 
@@ -373,10 +375,6 @@ async def create_group(body: GroupCreate, current: Annotated[dict, Depends(get_c
             await con.execute(
                 "INSERT INTO group_memberships (group_id, user_id, role) VALUES ($1, $2, 'admin')",
                 group["group_id"], current["user_id"],
-            )
-            await con.execute(
-                "UPDATE invite_tokens SET used_at = NOW(), used_by = $1 WHERE token = $2",
-                current["user_id"], body.invite_token,
             )
 
     token = create_token(current["user_id"], current["is_admin"], group["group_id"], "admin")
@@ -1253,12 +1251,22 @@ async def create_market(
         if not member:
             raise HTTPException(status_code=400, detail="Subject user is not in your group")
 
+    # Validate league_id belongs to this group
+    league_id = body.league_id
+    if league_id and group_id:
+        lg = await pool.fetchrow(
+            "SELECT 1 FROM leagues WHERE league_id = $1 AND group_id = $2 AND status = 'active'",
+            league_id, group_id,
+        )
+        if not lg:
+            raise HTTPException(status_code=400, detail="League not found or not active in your group")
+
     row = await pool.fetchrow(
-        """INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at, subject_user_id)
-           VALUES ($1, $2, $3, 'open', $4, $5, $6, $7)
+        """INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at, subject_user_id, league_id)
+           VALUES ($1, $2, $3, 'open', $4, $5, $6, $7, $8)
            RETURNING *, (SELECT username FROM users WHERE userid = $7) AS subject_username,
                        (SELECT token_key FROM users WHERE userid = $7) AS subject_token_key""",
-        body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt, body.subject_user_id,
+        body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt, body.subject_user_id, league_id,
     )
     await manager.broadcast(
         WSMarketCreatedEvent(
@@ -1523,6 +1531,416 @@ async def topup_user(
 
 
 # reset-password endpoint removed — no passwords in this system
+
+
+# ── League routes ────────────────────────────────────────────
+
+def _league_out(row: asyncpg.Record) -> LeagueOut:
+    return LeagueOut(
+        league_id=row["league_id"],
+        group_id=row["group_id"],
+        name=row["name"],
+        starts_at=row["starts_at"].isoformat(),
+        ends_at=row["ends_at"].isoformat(),
+        status=row["status"],
+        starting_points=float(row["starting_points"]),
+        schedule_frequency=row["schedule_frequency"],
+        schedule_day=row["schedule_day"],
+        schedule_time=row["schedule_time"],
+        created_at=row["created_at"].isoformat(),
+    )
+
+
+@app.get("/groups/me/leagues", response_model=list[LeagueOut])
+async def list_leagues(current: Annotated[dict, Depends(get_current_user)]):
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    rows = await pool.fetch(
+        "SELECT * FROM leagues WHERE group_id = $1 ORDER BY starts_at DESC",
+        group_id,
+    )
+    return [_league_out(r) for r in rows]
+
+
+@app.get("/groups/me/leagues/current", response_model=Optional[LeagueOut])
+async def current_league(current: Annotated[dict, Depends(get_current_user)]):
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    now = datetime.now(timezone.utc)
+    row = await pool.fetchrow(
+        """SELECT * FROM leagues
+           WHERE group_id = $1 AND status = 'active' AND starts_at <= $2 AND ends_at >= $2
+           ORDER BY starts_at DESC LIMIT 1""",
+        group_id, now,
+    )
+    return _league_out(row) if row else None
+
+
+@app.post("/groups/me/leagues", response_model=LeagueOut)
+async def create_league(body: LeagueCreate, current: Annotated[dict, Depends(get_current_user)]):
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    group_id = current["group_id"]
+    pool = get_pool()
+    try:
+        starts = datetime.fromisoformat(body.starts_at.replace("Z", "+00:00"))
+        ends   = datetime.fromisoformat(body.ends_at.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+    if ends <= starts:
+        raise HTTPException(status_code=400, detail="ends_at must be after starts_at")
+
+    row = await pool.fetchrow(
+        """INSERT INTO leagues (group_id, name, starts_at, ends_at, starting_points,
+                                schedule_frequency, schedule_day, schedule_time, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
+        group_id, body.name, starts, ends, body.starting_points,
+        body.schedule_frequency, body.schedule_day, body.schedule_time, current["user_id"],
+    )
+    return _league_out(row)
+
+
+@app.post("/groups/me/leagues/{league_id}/end")
+async def end_league(league_id: int, current: Annotated[dict, Depends(get_current_user)]):
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    pool = get_pool()
+    row = await pool.fetchrow(
+        "UPDATE leagues SET status='ended' WHERE league_id=$1 AND group_id=$2 RETURNING league_id",
+        league_id, current["group_id"],
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="League not found")
+    return {"ok": True}
+
+
+@app.get("/groups/me/leagues/{league_id}/leaderboard", response_model=list[LeagueLeaderboardEntry])
+async def league_leaderboard(league_id: int, current: Annotated[dict, Depends(get_current_user)]):
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+
+    # Verify league belongs to group
+    lg = await pool.fetchrow("SELECT 1 FROM leagues WHERE league_id=$1 AND group_id=$2", league_id, group_id)
+    if not lg:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    # All group members
+    members = await pool.fetch(
+        """SELECT u.userid, u.username, u.token_key
+           FROM users u JOIN group_memberships gm ON gm.user_id = u.userid
+           WHERE gm.group_id = $1""",
+        group_id,
+    )
+
+    # Trade P&L on league markets
+    trade_rows = await pool.fetch(
+        """SELECT t.userid,
+                  SUM(CASE WHEN t.is_sell = FALSE THEN t.cost ELSE 0 END) AS spent,
+                  SUM(CASE WHEN t.is_sell = TRUE  THEN t.cost ELSE 0 END) AS received,
+                  COUNT(DISTINCT t.marketid) AS markets
+           FROM trades t
+           JOIN markets m ON m.marketid = t.marketid AND m.league_id = $1
+           WHERE t.is_bot = FALSE
+           GROUP BY t.userid""",
+        league_id,
+    )
+    trade_map: dict[int, dict] = {r["userid"]: {"spent": float(r["spent"]), "received": float(r["received"]), "markets": int(r["markets"])} for r in trade_rows}
+
+    # Settlement payouts: infer from winning trades on settled league markets
+    settled_rows = await pool.fetch(
+        """SELECT t.userid, m.settled_side,
+                  SUM(CASE WHEN t.side = TRUE  AND t.is_sell = FALSE THEN t.quantity ELSE 0 END) AS yes_bought,
+                  SUM(CASE WHEN t.side = TRUE  AND t.is_sell = TRUE  THEN t.quantity ELSE 0 END) AS yes_sold,
+                  SUM(CASE WHEN t.side = FALSE AND t.is_sell = FALSE THEN t.quantity ELSE 0 END) AS no_bought,
+                  SUM(CASE WHEN t.side = FALSE AND t.is_sell = TRUE  THEN t.quantity ELSE 0 END) AS no_sold
+           FROM trades t
+           JOIN markets m ON m.marketid = t.marketid AND m.league_id = $1 AND m.status = 'settled' AND m.settled_side IS NOT NULL
+           WHERE t.is_bot = FALSE
+           GROUP BY t.userid, m.settled_side""",
+        league_id,
+    )
+    payout_map: dict[int, float] = {}
+    for r in settled_rows:
+        uid = r["userid"]
+        if r["settled_side"]:  # YES won
+            payout = float(r["yes_bought"]) - float(r["yes_sold"])
+        else:  # NO won
+            payout = float(r["no_bought"]) - float(r["no_sold"])
+        payout_map[uid] = payout_map.get(uid, 0.0) + max(0.0, payout)
+
+    # Mark-to-market for open league positions
+    open_pos = await pool.fetch(
+        """SELECT p.userid, p.yespos, p.nopos, m.b, m.outstandingyes, m.outstandingno
+           FROM positions p
+           JOIN markets m ON m.marketid = p.marketid AND m.league_id = $1 AND m.status = 'open'""",
+        league_id,
+    )
+    mtm_map: dict[int, float] = {}
+    for p in open_pos:
+        uid = p["userid"]
+        b   = float(p["b"]); yq = float(p["outstandingyes"]); nq = float(p["outstandingno"])
+        val = 0.0
+        if float(p["yespos"]) > 0:
+            val += lmsr.cost_sell(b, yq, nq, float(p["yespos"]), True)
+        if float(p["nopos"]) > 0:
+            val += lmsr.cost_sell(b, yq, nq, float(p["nopos"]), False)
+        mtm_map[uid] = mtm_map.get(uid, 0.0) + val
+
+    # Trophies (markets won) scoped to league
+    trophy_rows = await pool.fetch(
+        """SELECT th.userid, COUNT(*) AS won
+           FROM trophies th
+           JOIN markets m ON m.marketid = th.marketid AND m.league_id = $1
+           WHERE th.rank = 1
+           GROUP BY th.userid""",
+        league_id,
+    )
+    won_map = {r["userid"]: int(r["won"]) for r in trophy_rows}
+
+    result = []
+    for m in members:
+        uid  = m["userid"]
+        td   = trade_map.get(uid, {"spent": 0.0, "received": 0.0, "markets": 0})
+        pnl  = payout_map.get(uid, 0.0) + td["received"] + mtm_map.get(uid, 0.0) - td["spent"]
+        result.append(LeagueLeaderboardEntry(
+            rank=0,
+            user_id=uid,
+            username=m["username"],
+            token_key=m["token_key"],
+            league_pnl=round(pnl, 1),
+            markets_participated=td["markets"],
+            markets_won=won_map.get(uid, 0),
+        ))
+
+    result.sort(key=lambda e: e.league_pnl, reverse=True)
+    for i, e in enumerate(result):
+        e.rank = i + 1
+    return result
+
+
+# ── Market idea routes ────────────────────────────────────────
+
+def _idea_out(row: asyncpg.Record) -> MarketIdeaOut:
+    return MarketIdeaOut(
+        idea_id=row["idea_id"],
+        title=row["title"],
+        description=row["description"],
+        status=row["status"],
+        submitted_by_username=row["submitted_by_username"],
+        submitted_by_token_key=row["submitted_by_token_key"],
+        admin_note=row["admin_note"],
+        market_id=row["market_id"],
+        created_at=row["created_at"].isoformat(),
+    )
+
+_IDEA_SELECT = """
+    SELECT mi.idea_id, mi.submitted_by, mi.title, mi.description, mi.status, mi.admin_note, mi.market_id, mi.created_at,
+           u.username AS submitted_by_username, u.token_key AS submitted_by_token_key
+    FROM market_ideas mi
+    JOIN users u ON u.userid = mi.submitted_by
+"""
+
+
+@app.get("/groups/me/ideas", response_model=list[MarketIdeaOut])
+async def list_ideas(current: Annotated[dict, Depends(get_current_user)]):
+    """Members see their own ideas. Admins see all ideas for the group."""
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    if current.get("group_role") == "admin":
+        rows = await pool.fetch(
+            _IDEA_SELECT + "WHERE mi.group_id = $1 ORDER BY mi.created_at DESC LIMIT 100",
+            group_id,
+        )
+    else:
+        rows = await pool.fetch(
+            _IDEA_SELECT + "WHERE mi.group_id = $1 AND mi.submitted_by = $2 ORDER BY mi.created_at DESC LIMIT 50",
+            group_id, current["user_id"],
+        )
+    return [_idea_out(r) for r in rows]
+
+
+@app.get("/groups/me/ideas/pending", response_model=list[MarketIdeaOut])
+async def pending_ideas(current: Annotated[dict, Depends(get_current_user)]):
+    """Group admin: list pending ideas that need review."""
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    group_id = current["group_id"]
+    pool = get_pool()
+    rows = await pool.fetch(
+        _IDEA_SELECT + "WHERE mi.group_id = $1 AND mi.status = 'pending' ORDER BY mi.created_at ASC",
+        group_id,
+    )
+    return [_idea_out(r) for r in rows]
+
+
+@app.post("/groups/me/ideas", response_model=MarketIdeaOut)
+async def submit_idea(body: MarketIdeaCreate, current: Annotated[dict, Depends(get_current_user)]):
+    """Any group member can submit a market idea."""
+    group_id = current.get("group_id")
+    if not group_id:
+        raise HTTPException(status_code=400, detail="Not in a group")
+    pool = get_pool()
+    row = await pool.fetchrow(
+        """INSERT INTO market_ideas (group_id, submitted_by, title, description)
+           VALUES ($1, $2, $3, $4) RETURNING idea_id, title, description, status, admin_note, market_id, created_at""",
+        group_id, current["user_id"], body.title, body.description,
+    )
+    user_row = await pool.fetchrow("SELECT username, token_key FROM users WHERE userid = $1", current["user_id"])
+    return MarketIdeaOut(
+        idea_id=row["idea_id"],
+        title=row["title"],
+        description=row["description"],
+        status=row["status"],
+        submitted_by_username=user_row["username"],
+        submitted_by_token_key=user_row["token_key"],
+        admin_note=row["admin_note"],
+        market_id=row["market_id"],
+        created_at=row["created_at"].isoformat(),
+    )
+
+
+@app.post("/admin/ideas/{idea_id}/approve", response_model=MarketIdeaOut)
+async def approve_idea(
+    idea_id: int,
+    body: ApproveIdeaRequest,
+    current: Annotated[dict, Depends(get_current_user)],
+):
+    """Group admin: approve an idea, optionally editing title/description, then create the market."""
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    group_id = current["group_id"]
+    pool = get_pool()
+
+    idea = await pool.fetchrow(
+        _IDEA_SELECT + "WHERE mi.idea_id = $1 AND mi.group_id = $2",
+        idea_id, group_id,
+    )
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    if idea["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Idea already reviewed")
+
+    # Use admin's overrides or fall back to the original
+    title       = (body.title or idea["title"]).strip()
+    description = body.description if body.description is not None else idea["description"]
+
+    closes_at_dt: datetime | None = None
+    if body.closes_at:
+        try:
+            closes_at_dt = datetime.fromisoformat(body.closes_at.replace("Z", "+00:00"))
+            if closes_at_dt.tzinfo is None:
+                closes_at_dt = closes_at_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid closes_at format")
+
+    # Validate league if provided
+    league_id = body.league_id
+    if league_id:
+        lg = await pool.fetchrow(
+            "SELECT 1 FROM leagues WHERE league_id=$1 AND group_id=$2 AND status='active'",
+            league_id, group_id,
+        )
+        if not lg:
+            raise HTTPException(status_code=400, detail="League not found or not active")
+
+    async with pool.acquire() as con:
+        async with con.transaction():
+            mkt = await con.fetchrow(
+                """INSERT INTO markets (title, description, b, status, created_by, group_id, closes_at, league_id)
+                   VALUES ($1,$2,$3,'open',$4,$5,$6,$7) RETURNING *""",
+                title, description, body.b, current["user_id"], group_id, closes_at_dt, league_id,
+            )
+            updated = await con.fetchrow(
+                """UPDATE market_ideas
+                   SET status='approved', market_id=$1, reviewed_at=NOW(), reviewed_by=$2
+                   WHERE idea_id=$3 RETURNING idea_id, title, description, status, admin_note, market_id, created_at""",
+                mkt["marketid"], current["user_id"], idea_id,
+            )
+
+    market_cache._cache[mkt["marketid"]] = {
+        "b": float(mkt["b"]), "yes_qty": 0.0, "no_qty": 0.0,
+        "status": "open", "group_id": group_id, "closes_at": closes_at_dt,
+    }
+    await manager.broadcast(
+        WSMarketCreatedEvent(
+            market_id=mkt["marketid"],
+            title=mkt["title"],
+            closes_at=mkt["closes_at"].isoformat() if mkt["closes_at"] else None,
+        ).model_dump()
+    )
+    # Notify the submitter that their idea became a market
+    submitter_id = idea["submitted_by"]
+    if submitter_id != current["user_id"]:
+        asyncio.create_task(
+            _push_notification(pool, submitter_id, "market_created", mkt["marketid"],
+                               title, "admin",
+                               f'Your idea "{title}" is now live!')
+        )
+    return MarketIdeaOut(
+        idea_id=updated["idea_id"],
+        title=updated["title"],
+        description=updated["description"],
+        status=updated["status"],
+        submitted_by_username=idea["submitted_by_username"],
+        submitted_by_token_key=idea["submitted_by_token_key"],
+        admin_note=updated["admin_note"],
+        market_id=updated["market_id"],
+        created_at=updated["created_at"].isoformat(),
+    )
+
+
+@app.post("/admin/ideas/{idea_id}/reject", response_model=MarketIdeaOut)
+async def reject_idea(
+    idea_id: int,
+    body: RejectIdeaRequest,
+    current: Annotated[dict, Depends(get_current_user)],
+):
+    """Group admin: reject an idea with an optional note."""
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    pool = get_pool()
+    idea = await pool.fetchrow(
+        _IDEA_SELECT + "WHERE mi.idea_id = $1 AND mi.group_id = $2",
+        idea_id, current["group_id"],
+    )
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    if idea["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Idea already reviewed")
+    updated = await pool.fetchrow(
+        """UPDATE market_ideas
+           SET status='rejected', admin_note=$1, reviewed_at=NOW(), reviewed_by=$2
+           WHERE idea_id=$3 RETURNING idea_id, title, description, status, admin_note, market_id, created_at""",
+        body.note, current["user_id"], idea_id,
+    )
+    # Notify the submitter
+    submitter_id = idea["submitted_by"]
+    if submitter_id != current["user_id"]:
+        note_text = f' Note: {body.note}' if body.note else ''
+        asyncio.create_task(
+            _push_notification(pool, submitter_id, "chat", None, None,
+                               "admin",
+                               f'Your idea "{idea["title"]}" was not approved.{note_text}')
+        )
+    return MarketIdeaOut(
+        idea_id=updated["idea_id"],
+        title=updated["title"],
+        description=updated["description"],
+        status=updated["status"],
+        submitted_by_username=idea["submitted_by_username"],
+        submitted_by_token_key=idea["submitted_by_token_key"],
+        admin_note=updated["admin_note"],
+        market_id=updated["market_id"],
+        created_at=updated["created_at"].isoformat(),
+    )
 
 
 # ── WebSocket ────────────────────────────────────────────────
