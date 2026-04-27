@@ -342,7 +342,7 @@ export type WSChatEvent = {
 
 export type Notification = {
   id: number;
-  type: "trade" | "chat" | "settlement";
+  type: "trade" | "chat" | "settlement" | "market_created";
   market_id: number | null;
   market_title: string | null;
   actor_username: string | null;

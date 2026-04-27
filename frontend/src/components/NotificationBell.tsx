@@ -16,6 +16,7 @@ function timeAgo(iso: string): string {
 
 function typeIcon(type: Notification["type"]): string {
   if (type === "settlement") return "★";
+  if (type === "market_created") return "✓";
   if (type === "chat") return "↗";
   return "↕";
 }

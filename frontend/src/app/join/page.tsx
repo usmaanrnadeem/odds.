@@ -24,6 +24,12 @@ function JoinPageInner() {
       .catch(() => setPreviewError("This invite link is invalid or has expired."));
   }, [inviteToken]);
 
+  // Already in a group → redirect home (unless they're following a new invite link to switch)
+  useEffect(() => {
+    if (!user || inviteToken) return;
+    if (user.group_id) router.replace("/");
+  }, [user, inviteToken, router]);
+
   // If user is logged in AND a token is in the URL → auto-join immediately
   useEffect(() => {
     if (!user || !inviteToken) return;
@@ -85,6 +91,28 @@ function JoinPageInner() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create");
     } finally { setBusy(false); }
+  }
+
+  // Not logged in + no token → send to register
+  if (!inviteToken && !user) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--canvas)" }}>
+        <div className="w-full max-w-sm" style={{ textAlign: "center" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 28, color: "var(--accent)" }}>odds.</span>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)", margin: "16px 0 24px" }}>
+            you need an account to join or create a group.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <a href="/register" style={{ display: "block", padding: "14px", background: "var(--accent)", color: "#000", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", textDecoration: "none" }}>
+              create account
+            </a>
+            <a href="/login" style={{ display: "block", padding: "14px", background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 13, textDecoration: "none" }}>
+              sign in
+            </a>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   // ── Token flow — not logged in ───────────────────────────
