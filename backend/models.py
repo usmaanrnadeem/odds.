@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 
 
 VALID_TOKENS = Literal["wizard", "rocket", "fox", "knight", "shark", "bull", "ghost", "dragon"]
-VALID_RARITY = Literal["legendary", "rare", "common"]
 
 
 # ── Auth ────────────────────────────────────────────────────
@@ -57,7 +56,6 @@ class MarketCreate(BaseModel):
     b: float = Field(default=30.0, ge=10.0, le=10000.0)
     closes_at: Optional[str] = None
     subject_user_id: Optional[int] = None
-    league_id: Optional[int] = None
 
 
 class MarketOut(BaseModel):
@@ -79,7 +77,6 @@ class MarketOut(BaseModel):
     subject_user_id: Optional[int] = None
     subject_username: Optional[str] = None
     subject_token_key: Optional[str] = None
-    league_id: Optional[int] = None
 
 
 # ── Trading ─────────────────────────────────────────────────
@@ -238,42 +235,6 @@ class WSSettlementEvent(BaseModel):
     price_arc: list[float]
 
 
-# ── Leagues ──────────────────────────────────────────────────
-
-class LeagueCreate(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100)
-    starts_at: str  # ISO string
-    ends_at: str    # ISO string
-    starting_points: float = Field(default=1000.0, ge=100.0, le=100000.0)
-    schedule_frequency: Optional[Literal["weekly", "biweekly", "custom"]] = None
-    schedule_day: Optional[int] = Field(default=None, ge=0, le=6)  # 0=Mon...6=Sun
-    schedule_time: Optional[str] = None  # 'HH:MM'
-
-
-class LeagueOut(BaseModel):
-    league_id: int
-    group_id: int
-    name: str
-    starts_at: str
-    ends_at: str
-    status: str   # 'active' | 'ended'
-    starting_points: float
-    schedule_frequency: Optional[str]
-    schedule_day: Optional[int]
-    schedule_time: Optional[str]
-    created_at: str
-
-
-class LeagueLeaderboardEntry(BaseModel):
-    rank: int
-    user_id: int
-    username: str
-    token_key: str
-    league_pnl: float          # net P&L on league markets (realized + MTM)
-    markets_participated: int
-    markets_won: int
-
-
 # ── Market ideas ─────────────────────────────────────────────
 
 class MarketIdeaCreate(BaseModel):
@@ -298,7 +259,6 @@ class ApproveIdeaRequest(BaseModel):
     description: Optional[str] = None
     b: float = Field(default=30.0, ge=10.0, le=10000.0)
     closes_at: Optional[str] = None
-    league_id: Optional[int] = None
 
 
 class RejectIdeaRequest(BaseModel):

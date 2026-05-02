@@ -143,10 +143,10 @@ export const api = {
       { method: "POST" }
     ),
   // Admin markets
-  createMarket: (title: string, description: string | null, b: number, closes_at: string | null, subject_user_id: number | null, league_id?: number | null) =>
+  createMarket: (title: string, description: string | null, b: number, closes_at: string | null, subject_user_id: number | null) =>
     req<Market>("/admin/markets", {
       method: "POST",
-      body: JSON.stringify({ title, description, b, closes_at, subject_user_id, league_id }),
+      body: JSON.stringify({ title, description, b, closes_at, subject_user_id }),
     }),
   settleMarket: (id: number, side: boolean) =>
     req<SettleResult>(`/admin/markets/${id}/settle`, {
@@ -156,22 +156,12 @@ export const api = {
   pendingMarkets: () => req<Market[]>("/admin/markets/pending"),
   createInvite: () => req<{ token: string; expires_at: string }>("/admin/invites", { method: "POST" }),
 
-  // Leagues
-  leagues: () => req<League[]>("/groups/me/leagues"),
-  currentLeague: () => req<League | null>("/groups/me/leagues/current"),
-  createLeague: (data: { name: string; starts_at: string; ends_at: string; starting_points: number; schedule_frequency?: string | null; schedule_day?: number | null; schedule_time?: string | null }) =>
-    req<League>("/groups/me/leagues", { method: "POST", body: JSON.stringify(data) }),
-  endLeague: (leagueId: number) =>
-    req<{ ok: boolean }>(`/groups/me/leagues/${leagueId}/end`, { method: "POST" }),
-  leagueLeaderboard: (leagueId: number) =>
-    req<LeagueLeaderboardEntry[]>(`/groups/me/leagues/${leagueId}/leaderboard`),
-
   // Ideas
   ideas: () => req<MarketIdea[]>("/groups/me/ideas"),
   pendingIdeas: () => req<MarketIdea[]>("/groups/me/ideas/pending"),
   submitIdea: (title: string, description?: string) =>
     req<MarketIdea>("/groups/me/ideas", { method: "POST", body: JSON.stringify({ title, description }) }),
-  approveIdea: (ideaId: number, data: { title?: string; description?: string; b?: number; closes_at?: string | null; league_id?: number | null }) =>
+  approveIdea: (ideaId: number, data: { title?: string; description?: string; b?: number; closes_at?: string | null }) =>
     req<MarketIdea>(`/admin/ideas/${ideaId}/approve`, { method: "POST", body: JSON.stringify(data) }),
   rejectIdea: (ideaId: number, note?: string) =>
     req<MarketIdea>(`/admin/ideas/${ideaId}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
@@ -198,31 +188,6 @@ export type Market = {
   subject_user_id: number | null;
   subject_username: string | null;
   subject_token_key: string | null;
-  league_id: number | null;
-};
-
-export type League = {
-  league_id: number;
-  group_id: number;
-  name: string;
-  starts_at: string;
-  ends_at: string;
-  status: "active" | "ended";
-  starting_points: number;
-  schedule_frequency: "weekly" | "biweekly" | "custom" | null;
-  schedule_day: number | null;  // 0=Mon...6=Sun
-  schedule_time: string | null; // 'HH:MM'
-  created_at: string;
-};
-
-export type LeagueLeaderboardEntry = {
-  rank: number;
-  user_id: number;
-  username: string;
-  token_key: string;
-  league_pnl: number;
-  markets_participated: number;
-  markets_won: number;
 };
 
 export type MarketIdea = {

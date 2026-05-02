@@ -1,0 +1,2 @@
+ALTER TABLE markets DROP COLUMN IF EXISTS league_id;
+DROP TABLE IF EXISTS leagues;

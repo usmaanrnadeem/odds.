@@ -107,9 +107,9 @@ function VisualLeague() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {[
-        { label: "🏆  league standings", sub: "compete over a full season" },
         { label: "💡  pitch market ideas", sub: "admin picks the best ones" },
         { label: "📊  track your PnL", sub: "see how you did on each market" },
+        { label: "🏆  leaderboard", sub: "who's up, who's down" },
       ].map(({ label, sub }) => (
         <div key={label} style={{
           padding: "10px 14px", background: "var(--surface)", border: "1px solid var(--border)",
@@ -164,9 +164,9 @@ const SLIDES: Slide[] = [
     visual: (pts) => <VisualPoints startingPts={pts} />,
   },
   {
-    tag: "LEAGUES & MORE",
+    tag: "& MORE",
     title: "More than\njust a market.",
-    body: "Your group can run leagues — time-limited seasons with their own leaderboard. Pitch market ideas, vote with your wallet. Check the league tab.",
+    body: "Pitch market ideas, vote with your wallet. Check the leaderboard to see who's winning. Your profile shows your PnL on every settled market.",
     visual: () => <VisualLeague />,
   },
 ];

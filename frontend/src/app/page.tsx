@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, Market, League, WSEvent, connectWS } from "@/lib/api";
+import { api, Market, WSEvent, connectWS } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 import Token from "@/components/Token";
@@ -12,7 +12,7 @@ import OnboardingModal, { hasSeenOnboarding } from "@/components/OnboardingModal
 function LandingPage() {
   const FEATURES = [
     { icon: "⚡", title: "Live odds", body: "Every bet moves the market in real time. Watch prices shift as your crew trades." },
-    { icon: "🏆", title: "Leagues & seasons", body: "Run weekly or biweekly seasons with your own markets. Crown a champion at the end." },
+    { icon: "🏆", title: "Leaderboard", body: "See who's up and who's down. Every trade moves the odds and your ranking." },
     { icon: "💡", title: "Crowd-sourced markets", body: "Anyone can pitch a market idea. Admin picks the best ones and posts them." },
     { icon: "📊", title: "Track your PnL", body: "See exactly how you did on every market — what you paid in, what you got back." },
   ];
@@ -29,7 +29,7 @@ function LandingPage() {
             Prediction markets for your friend group.
           </p>
           <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, color: "var(--muted)", margin: "0 0 32px", lineHeight: 1.6 }}>
-            Bet on anything. Watch live odds. Run leagues. No real money — just bragging rights.
+            Bet on anything. Watch live odds. No real money — just bragging rights.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <a href="/register" style={{
@@ -242,7 +242,6 @@ export default function HomePage() {
   const [positions,  setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
   const [fetching,   setFetching]  = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [activeLeague, setActiveLeague] = useState<League | null>(null);
 
   useEffect(() => {
     if (!loading && user && !user.group_id && !user.is_admin) router.replace("/join");
@@ -258,10 +257,6 @@ export default function HomePage() {
       setMarkets(mkts);
       setPositions(new Map(pos.map(p => [p.market_id, p])));
     }).finally(() => setFetching(false));
-
-    if (user.group_id) {
-      api.currentLeague().then(setActiveLeague).catch(() => {});
-    }
 
     const disconnect = connectWS((event: WSEvent) => {
       if (event.type === "trade") {
@@ -326,26 +321,6 @@ export default function HomePage() {
             ⓘ
           </button>
         </div>
-
-        {/* Active league banner */}
-        {activeLeague && (
-          <Link href="/league" style={{ textDecoration: "none", display: "block", marginBottom: 20 }}>
-            <div style={{
-              padding: "10px 14px",
-              background: "color-mix(in srgb, var(--accent) 8%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-            }}>
-              <div>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", letterSpacing: "0.1em" }}>● LEAGUE</span>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)", margin: "2px 0 0" }}>
-                  {activeLeague.name}
-                </p>
-              </div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>standings →</span>
-            </div>
-          </Link>
-        )}
 
         {fetching ? (
           <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>loading…</p>
