@@ -41,11 +41,11 @@ from .models import (
     MarketOut,
     MessageIn,
     MessageOut,
+    MarketPnLOut,
     RegisterRequest,
     RejectIdeaRequest,
     SellRequest,
     SettleRequest,
-    TrophyOut,
     TradeOut,
     UserOut,
     NotificationOut,
@@ -1181,38 +1181,45 @@ async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
 
 # ── Trophies ─────────────────────────────────────────────────
 
-@app.get("/users/{user_id}/trophies", response_model=list[TrophyOut])
-async def user_trophies(user_id: int, _: Annotated[dict, Depends(get_current_user)]):
+@app.get("/users/{user_id}/market-pnl", response_model=list[MarketPnLOut])
+async def user_market_pnl(user_id: int, _: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
     rows = await pool.fetch(
         """
-        SELECT th.*, m.title AS market_title
-        FROM trophies th
-        JOIN markets m ON m.marketID = th.marketID
-        WHERE th.userID = $1
-        ORDER BY th.created_at DESC
+        SELECT
+            m.marketID AS market_id,
+            m.title    AS market_title,
+            m.settled_side,
+            m.settled_at,
+            COALESCE(SUM(CASE WHEN t.side = TRUE  AND t.is_sell = FALSE THEN t.quantity ELSE 0 END)
+                   - SUM(CASE WHEN t.side = TRUE  AND t.is_sell = TRUE  THEN t.quantity ELSE 0 END), 0) AS yes_position,
+            COALESCE(SUM(CASE WHEN t.side = FALSE AND t.is_sell = FALSE THEN t.quantity ELSE 0 END)
+                   - SUM(CASE WHEN t.side = FALSE AND t.is_sell = TRUE  THEN t.quantity ELSE 0 END), 0) AS no_position,
+            COALESCE(SUM(CASE WHEN t.is_sell = FALSE THEN t.cost ELSE 0 END), 0) AS total_bought,
+            COALESCE(SUM(CASE WHEN t.is_sell = TRUE  THEN t.cost ELSE 0 END), 0) AS total_sold
+        FROM markets m
+        JOIN trades t ON t.marketID = m.marketID AND t.userID = $1 AND t.is_bot = FALSE
+        WHERE m.status = 'settled' AND m.settled_side IS NOT NULL
+        GROUP BY m.marketID, m.title, m.settled_side, m.settled_at
+        ORDER BY m.settled_at DESC
         """,
         user_id,
     )
     result = []
     for r in rows:
-        # Fetch price arc for the card
-        arc_rows = await pool.fetch(
-            "SELECT yes_prob FROM market_prices WHERE marketID = $1 ORDER BY timestamp ASC",
-            r["marketid"],
-        )
-        arc = [float(a["yes_prob"]) for a in arc_rows]
+        yes_pos = float(r["yes_position"])
+        no_pos  = float(r["no_position"])
+        payout  = yes_pos if r["settled_side"] else no_pos
+        net_pnl = payout + float(r["total_sold"]) - float(r["total_bought"])
         result.append(
-            TrophyOut(
-                trophy_id=r["id"],
-                market_id=r["marketid"],
+            MarketPnLOut(
+                market_id=r["market_id"],
                 market_title=r["market_title"],
-                rank=r["rank"],
-                profit=float(r["profit"]),
-                title=r["title"],
-                rarity=r["rarity"],
-                created_at=r["created_at"].isoformat(),
-                price_arc=arc,
+                settled_side=r["settled_side"],
+                yes_position=round(yes_pos, 1),
+                no_position=round(no_pos, 1),
+                net_pnl=round(net_pnl, 1),
+                settled_at=r["settled_at"].isoformat(),
             )
         )
     return result
@@ -1386,45 +1393,21 @@ async def settle_market(
 
             scored.sort(key=lambda x: x["profit"], reverse=True)
 
-            # Determine rarity from market drama
             price_rows = await con.fetch(
                 "SELECT yes_prob FROM market_prices WHERE marketID = $1 ORDER BY timestamp",
                 market_id,
             )
             arc = [float(p["yes_prob"]) for p in price_rows]
-            swing = (max(arc) - min(arc)) if arc else 0
-            volume = await con.fetchval(
-                "SELECT COALESCE(SUM(quantity), 0) FROM trades WHERE marketID = $1 AND is_bot = FALSE",
-                market_id,
-            )
-            if swing > 0.30 and float(volume) > 500:
-                rarity = "legendary"
-            elif swing > 0.15 or float(volume) > 200:
-                rarity = "rare"
-            else:
-                rarity = "common"
 
-            TITLES = ["The Oracle", "The Contrarian", "The Degenerate"]
-
-            podium = []
-            for rank_idx, player in enumerate(scored[:3]):
-                title = TITLES[rank_idx]
-                await con.execute(
-                    """
-                    INSERT INTO trophies (userID, marketID, rank, profit, title, rarity)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT (userID, marketID) DO UPDATE
-                        SET rank=$3, profit=$4, title=$5, rarity=$6
-                    """,
-                    player["user_id"], market_id, rank_idx + 1,
-                    player["profit"], title, rarity,
-                )
-                podium.append({
+            podium = [
+                {
                     "rank": rank_idx + 1,
                     "username": player["username"],
                     "token_key": player["token_key"],
                     "profit": player["profit"],
-                })
+                }
+                for rank_idx, player in enumerate(scored[:3])
+            ]
 
             # Capture final probability before zeroing shares
             final_prob = lmsr.current_price(
@@ -1458,7 +1441,6 @@ async def settle_market(
             winner_username=winner["username"] if winner else "",
             winner_token_key=winner["token_key"] if winner else "",
             winner_profit=winner["profit"] if winner else 0,
-            winner_title=TITLES[0],
             podium=podium,
             price_arc=arc,
         ).model_dump()
@@ -1479,7 +1461,7 @@ async def settle_market(
             )
     asyncio.create_task(_fire_settlement_notifs())
 
-    return {"ok": True, "settled_side": body.side, "rarity": rarity, "podium": podium}
+    return {"ok": True, "settled_side": body.side, "podium": podium}
 
 
 @app.get("/admin/markets/pending", response_model=list[MarketOut])
@@ -1702,16 +1684,27 @@ async def league_leaderboard(league_id: int, current: Annotated[dict, Depends(ge
             val += lmsr.cost_sell(b, yq, nq, float(p["nopos"]), False)
         mtm_map[uid] = mtm_map.get(uid, 0.0) + val
 
-    # Trophies (markets won) scoped to league
-    trophy_rows = await pool.fetch(
-        """SELECT th.userid, COUNT(*) AS won
-           FROM trophies th
-           JOIN markets m ON m.marketid = th.marketid AND m.league_id = $1
-           WHERE th.rank = 1
-           GROUP BY th.userid""",
+    # Markets won = settled league markets where the user held a net winning position
+    won_rows = await pool.fetch(
+        """SELECT userid, COUNT(*) AS won FROM (
+               SELECT t.userid
+               FROM trades t
+               JOIN markets m ON m.marketid = t.marketid
+                   AND m.league_id = $1 AND m.status = 'settled' AND m.settled_side IS NOT NULL
+               WHERE t.is_bot = FALSE AND t.userid IS NOT NULL
+               GROUP BY t.userid, m.marketid, m.settled_side
+               HAVING
+                   (m.settled_side = TRUE  AND
+                    SUM(CASE WHEN t.side = TRUE  AND t.is_sell = FALSE THEN t.quantity ELSE 0 END)
+                  - SUM(CASE WHEN t.side = TRUE  AND t.is_sell = TRUE  THEN t.quantity ELSE 0 END) > 0)
+                   OR
+                   (m.settled_side = FALSE AND
+                    SUM(CASE WHEN t.side = FALSE AND t.is_sell = FALSE THEN t.quantity ELSE 0 END)
+                  - SUM(CASE WHEN t.side = FALSE AND t.is_sell = TRUE  THEN t.quantity ELSE 0 END) > 0)
+           ) AS wins GROUP BY userid""",
         league_id,
     )
-    won_map = {r["userid"]: int(r["won"]) for r in trophy_rows}
+    won_map = {r["userid"]: int(r["won"]) for r in won_rows}
 
     result = []
     for m in members:

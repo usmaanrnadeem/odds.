@@ -109,7 +109,7 @@ function VisualLeague() {
       {[
         { label: "🏆  league standings", sub: "compete over a full season" },
         { label: "💡  pitch market ideas", sub: "admin picks the best ones" },
-        { label: "🏅  earn trophies", sub: "oracle · contrarian · degen" },
+        { label: "📊  track your PnL", sub: "see how you did on each market" },
       ].map(({ label, sub }) => (
         <div key={label} style={{
           padding: "10px 14px", background: "var(--surface)", border: "1px solid var(--border)",
@@ -160,13 +160,13 @@ const SLIDES: Slide[] = [
   {
     tag: "YOUR STAKE",
     title: "Don't go broke.",
-    body: "These are your points for the whole game. Spend them wisely — you can't earn more, only win them from markets. Top 3 on each settlement earn a trophy.",
+    body: "These are your points for the whole game. Spend them wisely — you can't earn more, only win them from markets.",
     visual: (pts) => <VisualPoints startingPts={pts} />,
   },
   {
     tag: "LEAGUES & MORE",
     title: "More than\njust a market.",
-    body: "Your group can run leagues — time-limited seasons with their own leaderboard. Pitch market ideas, vote with your wallet, earn trophies. Check the league tab.",
+    body: "Your group can run leagues — time-limited seasons with their own leaderboard. Pitch market ideas, vote with your wallet. Check the league tab.",
     visual: () => <VisualLeague />,
   },
 ];

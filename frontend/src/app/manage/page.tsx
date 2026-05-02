@@ -111,7 +111,7 @@ export default function ManagePage() {
     setMsg("");
     try {
       const result = await api.settleMarket(settleId, settleSide);
-      setMsg(`Settled! Winner: ${result.podium[0]?.username ?? "none"}`);
+      setMsg(`Settled! Winner: ${result.podium[0]?.username ?? "none"} (+${result.podium[0]?.profit?.toFixed(1) ?? "0"} pts)`);
       setMarkets(prev => prev.filter(m => m.market_id !== settleId));
       setSettleId(null);
     } catch (err) {

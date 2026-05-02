@@ -14,7 +14,7 @@ function LandingPage() {
     { icon: "⚡", title: "Live odds", body: "Every bet moves the market in real time. Watch prices shift as your crew trades." },
     { icon: "🏆", title: "Leagues & seasons", body: "Run weekly or biweekly seasons with your own markets. Crown a champion at the end." },
     { icon: "💡", title: "Crowd-sourced markets", body: "Anyone can pitch a market idea. Admin picks the best ones and posts them." },
-    { icon: "🏅", title: "Trophies", body: "Win a market and earn a trophy card. The Oracle. The Contrarian. The Degenerate." },
+    { icon: "📊", title: "Track your PnL", body: "See exactly how you did on every market — what you paid in, what you got back." },
   ];
 
   return (

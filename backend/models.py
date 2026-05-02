@@ -132,18 +132,16 @@ class LeaderboardEntry(BaseModel):
     accuracy: float   # 0.0–1.0
 
 
-# ── Trophies ────────────────────────────────────────────────
+# ── Market PnL (settled markets) ────────────────────────────
 
-class TrophyOut(BaseModel):
-    trophy_id: int
+class MarketPnLOut(BaseModel):
     market_id: int
     market_title: str
-    rank: int
-    profit: float
-    title: str
-    rarity: VALID_RARITY
-    created_at: str
-    price_arc: list[float]   # list of yes_prob values for the sparkline
+    settled_side: bool
+    yes_position: float
+    no_position: float
+    net_pnl: float
+    settled_at: str
 
 
 # ── Admin ────────────────────────────────────────────────────
@@ -236,7 +234,6 @@ class WSSettlementEvent(BaseModel):
     winner_username: str
     winner_token_key: str
     winner_profit: float
-    winner_title: str
     podium: list[dict]   # [{rank, username, token_key, profit}]
     price_arc: list[float]
 

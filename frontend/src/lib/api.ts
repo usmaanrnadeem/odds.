@@ -111,9 +111,9 @@ export const api = {
   position: (id: number) => req<{ yes: number; no: number }>(`/markets/${id}/position`),
   allPositions: () => req<{ market_id: number; yes: number; no: number }[]>("/users/me/positions"),
 
-  // Leaderboard + trophies
+  // Leaderboard + market PnL
   leaderboard: () => req<LeaderboardEntry[]>("/leaderboard"),
-  trophies: (userId: number) => req<Trophy[]>(`/users/${userId}/trophies`),
+  marketPnl: (userId: number) => req<MarketPnL[]>(`/users/${userId}/market-pnl`),
 
   // Group
   groupMembers: () => req<GroupMember[]>("/groups/members"),
@@ -271,22 +271,19 @@ export type LeaderboardEntry = {
   accuracy: number;
 };
 
-export type Trophy = {
-  trophy_id: number;
+export type MarketPnL = {
   market_id: number;
   market_title: string;
-  rank: number;
-  profit: number;
-  title: string;
-  rarity: "legendary" | "rare" | "common";
-  created_at: string;
-  price_arc: number[];
+  settled_side: boolean;
+  yes_position: number;
+  no_position: number;
+  net_pnl: number;
+  settled_at: string;
 };
 
 export type SettleResult = {
   ok: boolean;
   settled_side: boolean;
-  rarity: string;
   podium: { rank: number; username: string; token_key: string; profit: number }[];
 };
 
@@ -310,7 +307,6 @@ export type WSSettlementEvent = {
   winner_username: string;
   winner_token_key: string;
   winner_profit: number;
-  winner_title: string;
   podium: { rank: number; username: string; token_key: string; profit: number }[];
   price_arc: number[];
 };

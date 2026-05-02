@@ -190,9 +190,6 @@ export default function SettlementPopup() {
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "var(--text)", margin: "0 0 2px" }}>
                   {event.winner_username}
                 </p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--accent)", margin: "0 0 6px", letterSpacing: "0.08em" }}>
-                  {event.winner_title}
-                </p>
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 700, color: "var(--accent)", margin: 0 }}>
                   +{event.winner_profit.toFixed(1)} pts
                 </p>
