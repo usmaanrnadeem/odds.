@@ -239,7 +239,10 @@ app.add_middleware(
 # ── Helpers ──────────────────────────────────────────────────
 
 def _market_out(row: asyncpg.Record) -> MarketOut:
-    yes_prob = lmsr.current_price(row["b"], row["outstandingyes"], row["outstandingno"])
+    if row["status"] == "settled" and row.get("final_yes_prob") is not None:
+        yes_prob = float(row["final_yes_prob"])
+    else:
+        yes_prob = lmsr.current_price(row["b"], row["outstandingyes"], row["outstandingno"])
     no_prob = 1 - yes_prob
     return MarketOut(
         market_id=row["marketid"],
@@ -1423,16 +1426,23 @@ async def settle_market(
                     "profit": player["profit"],
                 })
 
+            # Capture final probability before zeroing shares
+            final_prob = lmsr.current_price(
+                float(market["b"]),
+                float(market["outstandingyes"]),
+                float(market["outstandingno"]),
+            )
+
             # Close out positions
             await con.execute("DELETE FROM positions WHERE marketID = $1", market_id)
             await con.execute(
                 """
                 UPDATE markets
                 SET status = 'settled', settled_side = $1, settled_at = NOW(),
-                    outstandingYes = 0, outstandingNo = 0
+                    outstandingYes = 0, outstandingNo = 0, final_yes_prob = $3
                 WHERE marketID = $2
                 """,
-                body.side, market_id,
+                body.side, market_id, final_prob,
             )
 
     # Invalidate cache — market is now settled, no more trades possible
