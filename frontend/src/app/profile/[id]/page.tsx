@@ -143,15 +143,13 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
                   }}
                 >
                   {/* Side badge */}
-                  {heldSide && (
-                    <span style={{
-                      fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
-                      color: heldSide === "YES" ? "var(--accent)" : "var(--no)",
-                      minWidth: 24,
-                    }}>
-                      {heldSide}
-                    </span>
-                  )}
+                  <span style={{
+                    fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+                    color: heldSide === "YES" ? "var(--accent)" : heldSide === "NO" ? "var(--no)" : "var(--muted)",
+                    minWidth: 24,
+                  }}>
+                    {heldSide ?? "FLAT"}
+                  </span>
 
                   {/* Market title */}
                   <span style={{ flex: 1, fontSize: 13, color: won ? "var(--text)" : "var(--muted)", lineHeight: 1.35 }}>
