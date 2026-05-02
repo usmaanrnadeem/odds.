@@ -1113,11 +1113,14 @@ async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
         f"""
         SELECT u.userID, u.username, u.token_key, u.points,
                COUNT(DISTINCT t.marketID) FILTER (WHERE t.is_bot = FALSE) AS markets_participated,
-               COUNT(DISTINCT th.marketID)                                  AS markets_won
+               COUNT(DISTINCT CASE
+                   WHEN m.status = 'settled' AND m.settled_side IS NOT NULL
+                        AND t.side = m.settled_side AND t.is_bot = FALSE
+                   THEN m.marketID END) AS markets_won
         FROM users u
         {group_join}
-        LEFT JOIN trades t    ON t.userID = u.userID AND t.is_bot = FALSE
-        LEFT JOIN trophies th ON th.userID = u.userID AND th.rank = 1
+        LEFT JOIN trades t ON t.userID = u.userID
+        LEFT JOIN markets m ON m.marketID = t.marketID
         {user_filter}
         GROUP BY u.userID
         """,
