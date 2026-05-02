@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, Market, ApiError, GroupMember } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
+import AdminOnboardingModal, { hasSeenAdminOnboarding, markAdminOnboardingSeen } from "@/components/AdminOnboardingModal";
 
 // ── Settle row ────────────────────────────────────────────────
 
@@ -108,6 +109,15 @@ export default function ManagePage() {
   // Invite
   const [copied, setCopied] = useState(false);
 
+  // Admin guide
+  const [showGuide, setShowGuide] = useState(false);
+
+  // Transfer admin
+  const [transferId,   setTransferId]   = useState<number | null>(null);
+  const [transferStep, setTransferStep] = useState<"idle" | "confirm">("idle");
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferMsg,  setTransferMsg]  = useState("");
+
   useEffect(() => {
     if (!loading && (!user || user.group_role !== "admin")) router.replace("/");
   }, [user, loading, router]);
@@ -118,6 +128,7 @@ export default function ManagePage() {
     api.groupMembers().then(setMembers);
     api.pendingIdeas().then(ideas => setPendingIdeasCount(ideas.length)).catch(() => {});
     api.myGroup().then(g => setJoinToken(g.join_token ?? null)).catch(() => {});
+    if (!hasSeenAdminOnboarding()) setShowGuide(true);
   }, [user]);
 
   async function postMarket(e: React.FormEvent) {
@@ -147,23 +158,54 @@ export default function ManagePage() {
     } finally { setTopupBusy(false); }
   }
 
+  async function doTransfer() {
+    if (!transferId) return;
+    setTransferBusy(true); setTransferMsg("");
+    try {
+      await api.transferAdmin(transferId);
+      router.replace("/");
+    } catch (err) {
+      setTransferMsg(err instanceof ApiError ? err.message : "Failed");
+      setTransferBusy(false);
+      setTransferStep("idle");
+    }
+  }
+
   if (loading || user?.group_role !== "admin") return null;
 
   const openMarkets = markets;
+  const otherMembers = members.filter(m => m.user_id !== user.user_id);
 
   return (
     <>
       <Nav />
+      {showGuide && (
+        <AdminOnboardingModal onDone={() => { markAdminOnboardingSeen(); setShowGuide(false); }} />
+      )}
       <main className="page-content">
 
         {/* Header */}
-        <div style={{ marginBottom: 28 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: "0 0 2px" }}>
-            ADMIN
-          </p>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0 }}>
-            {user.group_name}
-          </p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28 }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: "0 0 2px" }}>
+              ADMIN
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0 }}>
+              {user.group_name}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowGuide(true)}
+            title="Admin guide"
+            style={{
+              background: "transparent", border: "1px solid var(--border)",
+              color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 13,
+              width: 32, height: 32, cursor: "pointer", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            ⓘ
+          </button>
         </div>
 
         {/* Stats bar */}
@@ -413,6 +455,74 @@ export default function ManagePage() {
               {topupBusy ? "…" : `give ${topupAmt} pts`}
             </button>
           </div>
+        </section>
+
+        {/* Transfer admin */}
+        <section style={{ marginBottom: 32, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", fontWeight: 700, margin: "0 0 3px", letterSpacing: "0.06em" }}>
+              TRANSFER ADMIN
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+              Hand over admin rights to another member. You'll become a regular member.
+            </p>
+          </div>
+
+          {otherMembers.length === 0 ? (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>no other members yet</p>
+          ) : transferStep === "idle" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <select
+                value={transferId ?? ""}
+                onChange={e => { setTransferId(e.target.value ? parseInt(e.target.value) : null); setTransferMsg(""); }}
+                style={{ ...inputStyle, appearance: "none" }}
+              >
+                <option value="">select new admin…</option>
+                {otherMembers.map(m => (
+                  <option key={m.user_id} value={m.user_id}>{m.username}</option>
+                ))}
+              </select>
+              <button
+                disabled={!transferId}
+                onClick={() => setTransferStep("confirm")}
+                style={{
+                  ...outlineBtn, width: "100%",
+                  color: "var(--muted)", borderColor: "var(--border)",
+                  opacity: !transferId ? 0.4 : 1,
+                  cursor: !transferId ? "not-allowed" : "pointer",
+                }}
+              >
+                transfer admin
+              </button>
+            </div>
+          ) : (
+            <div style={{ padding: "14px", background: "var(--surface)", border: "1px solid var(--border)" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", margin: "0 0 6px", lineHeight: 1.5 }}>
+                Make <span style={{ color: "var(--accent)", fontWeight: 700 }}>
+                  {otherMembers.find(m => m.user_id === transferId)?.username}
+                </span> the admin?
+              </p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: "0 0 14px", lineHeight: 1.5 }}>
+                You'll lose admin access immediately and be redirected.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={doTransfer}
+                  disabled={transferBusy}
+                  style={{ ...primaryBtn, flex: 1, background: "transparent", border: "1px solid var(--no)", color: "var(--no)", opacity: transferBusy ? 0.5 : 1 }}
+                >
+                  {transferBusy ? "…" : "confirm transfer"}
+                </button>
+                <button
+                  onClick={() => { setTransferStep("idle"); setTransferMsg(""); }}
+                  style={{ ...outlineBtn, color: "var(--muted)" }}
+                >
+                  cancel
+                </button>
+              </div>
+              {transferMsg && <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--no)", margin: "8px 0 0" }}>{transferMsg}</p>}
+            </div>
+          )}
         </section>
 
       </main>

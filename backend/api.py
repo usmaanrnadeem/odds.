@@ -454,6 +454,37 @@ async def my_group(current: Annotated[dict, Depends(get_current_user)]):
     return result
 
 
+@app.post("/groups/me/transfer-admin")
+async def transfer_admin(
+    body: dict,
+    current: Annotated[dict, Depends(get_current_user)],
+):
+    if current.get("group_role") != "admin":
+        raise HTTPException(status_code=403, detail="Group admin only")
+    target_user_id = body.get("target_user_id")
+    if not target_user_id or target_user_id == current["user_id"]:
+        raise HTTPException(status_code=400, detail="Invalid target user")
+    group_id = current["group_id"]
+    pool = get_pool()
+    async with pool.acquire() as con:
+        async with con.transaction():
+            member = await con.fetchrow(
+                "SELECT 1 FROM group_memberships WHERE group_id = $1 AND user_id = $2",
+                group_id, target_user_id,
+            )
+            if not member:
+                raise HTTPException(status_code=400, detail="User is not in your group")
+            await con.execute(
+                "UPDATE group_memberships SET role = 'member' WHERE group_id = $1 AND user_id = $2",
+                group_id, current["user_id"],
+            )
+            await con.execute(
+                "UPDATE group_memberships SET role = 'admin' WHERE group_id = $1 AND user_id = $2",
+                group_id, target_user_id,
+            )
+    return {"ok": True}
+
+
 @app.get("/groups/members")
 async def group_members(current: Annotated[dict, Depends(get_current_user)]):
     """Return all members in the current user's group."""

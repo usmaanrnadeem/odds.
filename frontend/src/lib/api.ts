@@ -122,6 +122,9 @@ export const api = {
   marketChat: (id: number) => req<ChatMessage[]>(`/markets/${id}/chat`),
   sendMarketChat: (id: number, content: string) =>
     req<ChatMessage>(`/markets/${id}/chat`, { method: "POST", body: JSON.stringify({ content }) }),
+  transferAdmin: (targetUserId: number) =>
+    req<{ ok: boolean }>("/groups/me/transfer-admin", { method: "POST", body: JSON.stringify({ target_user_id: targetUserId }) }),
+
   groupChat: () => req<ChatMessage[]>("/groups/me/chat"),
   sendGroupChat: (content: string) =>
     req<ChatMessage>("/groups/me/chat", { method: "POST", body: JSON.stringify({ content }) }),
