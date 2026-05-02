@@ -1539,21 +1539,14 @@ _IDEA_SELECT = """
 
 @app.get("/groups/me/ideas", response_model=list[MarketIdeaOut])
 async def list_ideas(current: Annotated[dict, Depends(get_current_user)]):
-    """Members see their own ideas. Admins see all ideas for the group."""
     group_id = current.get("group_id")
     if not group_id:
         raise HTTPException(status_code=400, detail="Not in a group")
     pool = get_pool()
-    if current.get("group_role") == "admin":
-        rows = await pool.fetch(
-            _IDEA_SELECT + "WHERE mi.group_id = $1 ORDER BY mi.created_at DESC LIMIT 100",
-            group_id,
-        )
-    else:
-        rows = await pool.fetch(
-            _IDEA_SELECT + "WHERE mi.group_id = $1 AND mi.submitted_by = $2 ORDER BY mi.created_at DESC LIMIT 50",
-            group_id, current["user_id"],
-        )
+    rows = await pool.fetch(
+        _IDEA_SELECT + "WHERE mi.group_id = $1 ORDER BY mi.created_at DESC LIMIT 100",
+        group_id,
+    )
     return [_idea_out(r) for r in rows]
 
 

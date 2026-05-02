@@ -9,8 +9,8 @@ import NotificationBell from "./NotificationBell";
 const STATIC_LINKS = [
   { href: "/",            label: "markets", className: "nav-markets" },
   { href: "/leaderboard", label: "board",   className: ""            },
-  { href: "/ideas",       label: "ideas",   className: ""            },
   { href: "/chat",        label: "chat",    className: ""            },
+  { href: "/ideas",       label: "ideas",   className: ""            },
 ];
 
 export default function Nav() {
