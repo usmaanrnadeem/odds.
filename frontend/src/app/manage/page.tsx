@@ -5,30 +5,108 @@ import { api, Market, ApiError, GroupMember } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 
+// ── Settle row ────────────────────────────────────────────────
+
+function SettleRow({ market, onSettled }: { market: Market; onSettled: (id: number) => void }) {
+  const [confirming, setConfirming] = useState<boolean | null>(null); // null=idle, true=YES, false=NO
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function confirm(side: boolean) {
+    setBusy(true); setErr("");
+    try {
+      await api.settleMarket(market.market_id, side);
+      onSettled(market.market_id);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Failed");
+      setBusy(false);
+      setConfirming(null);
+    }
+  }
+
+  return (
+    <div style={{
+      padding: "12px 14px",
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
+    }}>
+      <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 10px", lineHeight: 1.4 }}>
+        {market.title}
+      </p>
+
+      {confirming === null ? (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setConfirming(true)}
+            style={{ ...outlineBtn, color: "var(--accent)", borderColor: "var(--accent)", flex: 1 }}
+          >
+            YES happened
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            style={{ ...outlineBtn, color: "var(--no)", borderColor: "var(--no)", flex: 1 }}
+          >
+            NO happened
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: "0 0 8px" }}>
+            Settle as <span style={{ color: confirming ? "var(--accent)" : "var(--no)", fontWeight: 700 }}>
+              {confirming ? "YES" : "NO"}
+            </span> — points paid out automatically. Sure?
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => confirm(confirming)}
+              disabled={busy}
+              style={{ ...primaryBtn, flex: 1, opacity: busy ? 0.5 : 1 }}
+            >
+              {busy ? "…" : "confirm"}
+            </button>
+            <button
+              onClick={() => setConfirming(null)}
+              style={{ ...outlineBtn, color: "var(--muted)", flex: 1 }}
+            >
+              cancel
+            </button>
+          </div>
+          {err && <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--no)", marginTop: 6 }}>{err}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────
+
 export default function ManagePage() {
   const { user, loading } = useUser();
   const router = useRouter();
 
+  const [markets,    setMarkets]    = useState<Market[]>([]);
+  const [members,    setMembers]    = useState<GroupMember[]>([]);
+  const [joinToken,  setJoinToken]  = useState<string | null>(null);
+  const [pendingIdeasCount, setPendingIdeasCount] = useState(0);
+
+  // Post a market
   const [title,     setTitle]     = useState("");
   const [desc,      setDesc]      = useState("");
   const [b,         setB]         = useState(30);
   const [closesAt,  setClosesAt]  = useState("");
   const [subjectId, setSubjectId] = useState<number | null>(null);
-  const [busy,      setBusy]      = useState(false);
-  const [msg,       setMsg]       = useState("");
+  const [showAdv,   setShowAdv]   = useState(false);
+  const [postBusy,  setPostBusy]  = useState(false);
+  const [postMsg,   setPostMsg]   = useState("");
 
-  const [markets,    setMarkets]    = useState<Market[]>([]);
-  const [settleId,   setSettleId]   = useState<number | null>(null);
-  const [settleSide, setSettleSide] = useState<boolean>(true);
+  // Top up
+  const [topupId,   setTopupId]   = useState<number | null>(null);
+  const [topupAmt,  setTopupAmt]  = useState(100);
+  const [topupBusy, setTopupBusy] = useState(false);
+  const [topupMsg,  setTopupMsg]  = useState("");
 
-  const [members,    setMembers]    = useState<GroupMember[]>([]);
-  const [topupId,    setTopupId]    = useState<number | null>(null);
-  const [topupAmt,   setTopupAmt]   = useState(100);
-
-  const [joinToken,  setJoinToken]  = useState<string | null>(null);
-  const [copied,     setCopied]     = useState(false);
-
-  const [pendingIdeasCount, setPendingIdeasCount] = useState(0);
+  // Invite
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!loading && (!user || user.group_role !== "admin")) router.replace("/");
@@ -39,84 +117,221 @@ export default function ManagePage() {
     api.markets().then(mkts => setMarkets(mkts.filter(m => m.status === "open")));
     api.groupMembers().then(setMembers);
     api.pendingIdeas().then(ideas => setPendingIdeasCount(ideas.length)).catch(() => {});
-    api.myGroup()
-      .then(g => setJoinToken(g.join_token ?? null))
-      .catch(err => setMsg(`invite link error: ${err instanceof ApiError ? err.message : String(err)}`));
+    api.myGroup().then(g => setJoinToken(g.join_token ?? null)).catch(() => {});
   }, [user]);
 
-  async function createMarket(e: React.FormEvent) {
+  async function postMarket(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg("");
+    setPostBusy(true); setPostMsg("");
     try {
       const closesAtUtc = closesAt ? new Date(closesAt).toISOString() : null;
       const m = await api.createMarket(title, desc || null, b, closesAtUtc, subjectId);
-      setMsg(`Created: "${m.title}"`);
-      setTitle(""); setDesc(""); setClosesAt(""); setSubjectId(null);
+      setPostMsg(`"${m.title}" is now live`);
+      setTitle(""); setDesc(""); setClosesAt(""); setSubjectId(null); setShowAdv(false);
       setMarkets(prev => [m, ...prev]);
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function settle() {
-    if (settleId === null) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const result = await api.settleMarket(settleId, settleSide);
-      setMsg(`Settled! Winner: ${result.podium[0]?.username ?? "none"} (+${result.podium[0]?.profit?.toFixed(1) ?? "0"} pts)`);
-      setMarkets(prev => prev.filter(m => m.market_id !== settleId));
-      setSettleId(null);
-    } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+      setPostMsg(err instanceof ApiError ? err.message : "Failed");
+    } finally { setPostBusy(false); }
   }
 
   async function topup() {
-    if (topupId === null) return;
-    setBusy(true);
-    setMsg("");
+    if (!topupId) return;
+    setTopupBusy(true); setTopupMsg("");
     try {
       const result = await api.topupUser(topupId, topupAmt);
-      setMsg(`Added ${topupAmt} pts to ${result.username} (now ${result.new_balance.toFixed(0)} pts)`);
+      setTopupMsg(`+${topupAmt} pts given to ${result.username}`);
       api.groupMembers().then(setMembers);
       setTopupId(null);
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
+      setTopupMsg(err instanceof ApiError ? err.message : "Failed");
+    } finally { setTopupBusy(false); }
   }
 
   if (loading || user?.group_role !== "admin") return null;
+
+  const openMarkets = markets;
 
   return (
     <>
       <Nav />
       <main className="page-content">
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: 0 }}>
-            MANAGE
+
+        {/* Header */}
+        <div style={{ marginBottom: 28 }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: "0 0 2px" }}>
+            ADMIN
           </p>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--accent)", margin: "4px 0 0" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0 }}>
             {user.group_name}
           </p>
         </div>
 
-        {msg && (
-          <div style={{ padding: "10px 12px", background: "var(--surface)", border: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", marginBottom: 20 }}>
-            {msg}
-          </div>
+        {/* Stats bar */}
+        <div style={{ display: "flex", gap: 20, marginBottom: 28, paddingBottom: 20, borderBottom: "1px solid var(--border)" }}>
+          {[
+            { label: "open markets", value: openMarkets.length },
+            { label: "members",      value: members.length },
+            { label: "ideas to review", value: pendingIdeasCount, accent: pendingIdeasCount > 0 },
+          ].map(s => (
+            <div key={s.label}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, margin: 0, color: s.accent ? "var(--accent)" : "var(--text)" }}>
+                {s.value}
+              </p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted)", margin: "2px 0 0", letterSpacing: "0.06em" }}>
+                {s.label.toUpperCase()}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Pending ideas alert */}
+        {pendingIdeasCount > 0 && (
+          <a
+            href="/ideas"
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "12px 14px", marginBottom: 28,
+              background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+              textDecoration: "none",
+            }}
+          >
+            <div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent)", letterSpacing: "0.1em", margin: "0 0 2px" }}>
+                ACTION NEEDED
+              </p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)", margin: 0 }}>
+                {pendingIdeasCount} market {pendingIdeasCount === 1 ? "idea" : "ideas"} waiting for review
+              </p>
+            </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)" }}>review →</span>
+          </a>
         )}
+
+        {/* Post a market */}
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", fontWeight: 700, margin: "0 0 3px", letterSpacing: "0.06em" }}>
+              POST A MARKET
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+              Create a yes/no question. Your group bets on it — you settle it once the outcome is known.
+            </p>
+          </div>
+
+          <form onSubmit={postMarket} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input
+              placeholder="e.g. Will Tom be late to Saturday's match?"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              required
+              minLength={3}
+              maxLength={200}
+              style={inputStyle}
+            />
+            <textarea
+              placeholder="Extra context (optional)"
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              rows={2}
+              style={{ ...inputStyle, resize: "none" }}
+            />
+
+            {/* Advanced toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdv(x => !x)}
+              style={{ background: "none", border: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", cursor: "pointer", padding: "2px 0", textAlign: "left" }}
+            >
+              {showAdv ? "▲ fewer options" : "▼ more options"}
+            </button>
+
+            {showAdv && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label style={labelStyle}>Trading closes at (optional)</label>
+                  <input
+                    type="datetime-local"
+                    value={closesAt}
+                    onChange={e => setClosesAt(e.target.value)}
+                    style={{ ...inputStyle, colorScheme: "dark" }}
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label style={labelStyle}>About a group member (optional)</label>
+                  <select
+                    value={subjectId ?? ""}
+                    onChange={e => setSubjectId(e.target.value ? parseInt(e.target.value) : null)}
+                    style={{ ...inputStyle, appearance: "none" }}
+                  >
+                    <option value="">no specific person</option>
+                    {members.map(m => (
+                      <option key={m.user_id} value={m.user_id}>{m.username}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <label style={{ ...labelStyle, whiteSpace: "nowrap" }}>Liquidity (default 30)</label>
+                  <input
+                    type="number"
+                    value={b}
+                    onChange={e => setB(Number(e.target.value))}
+                    min={10} max={10000}
+                    style={{ ...inputStyle, width: 80 }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {postMsg && (
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--accent)", margin: 0 }}>{postMsg}</p>
+            )}
+            <button
+              type="submit"
+              disabled={postBusy || !title.trim()}
+              style={{ ...primaryBtn, opacity: postBusy || !title.trim() ? 0.4 : 1, cursor: postBusy || !title.trim() ? "not-allowed" : "pointer" }}
+            >
+              {postBusy ? "…" : "post market"}
+            </button>
+          </form>
+        </section>
+
+        {/* Settle markets */}
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", fontWeight: 700, margin: "0 0 3px", letterSpacing: "0.06em" }}>
+              SETTLE A MARKET
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+              Once you know the outcome, settle it here. Points are paid out automatically.
+            </p>
+          </div>
+
+          {openMarkets.length === 0 ? (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>no open markets</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {openMarkets.map(m => (
+                <SettleRow
+                  key={m.market_id}
+                  market={m}
+                  onSettled={id => setMarkets(prev => prev.filter(x => x.market_id !== id))}
+                />
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Invite link */}
         <section style={{ marginBottom: 32 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>INVITE LINK</p>
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", fontWeight: 700, margin: "0 0 3px", letterSpacing: "0.06em" }}>
+              INVITE PEOPLE
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+              Share this link to add people to your group.
+            </p>
+          </div>
           {joinToken && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{
@@ -130,20 +345,16 @@ export default function ManagePage() {
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   onClick={() => {
-                    const url = `${window.location.origin}/join?token=${joinToken}`;
-                    navigator.clipboard.writeText(url);
+                    navigator.clipboard.writeText(`${window.location.origin}/join?token=${joinToken}`);
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
                   }}
-                  style={{ ...primaryBtnStyle, flex: 1 }}
+                  style={{ ...primaryBtn, flex: 1 }}
                 >
                   {copied ? "copied ✓" : "copy link"}
                 </button>
                 <button
-                  onClick={async () => {
-                    const r = await api.regenerateJoinToken();
-                    setJoinToken(r.join_token);
-                  }}
+                  onClick={async () => { const r = await api.regenerateJoinToken(); setJoinToken(r.join_token); }}
                   style={{ padding: "10px 14px", background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer" }}
                 >
                   regenerate
@@ -153,103 +364,16 @@ export default function ManagePage() {
           )}
         </section>
 
-        {/* Create market */}
-        <section style={{ marginBottom: 32 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>CREATE MARKET</p>
-          <form onSubmit={createMarket} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input
-              placeholder="Market question"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <textarea
-              placeholder="Description (optional)"
-              value={desc}
-              onChange={e => setDesc(e.target.value)}
-              rows={2}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <label style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>liquidity b:</label>
-              <input
-                type="number"
-                value={b}
-                onChange={e => setB(Number(e.target.value))}
-                min={10} max={10000}
-                style={{ ...inputStyle, width: 80 }}
-              />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>close time (optional):</label>
-              <input
-                type="datetime-local"
-                value={closesAt}
-                onChange={e => setClosesAt(e.target.value)}
-                style={{ ...inputStyle, colorScheme: "dark" }}
-              />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)" }}>about a player (optional):</label>
-              <select
-                value={subjectId ?? ""}
-                onChange={e => setSubjectId(e.target.value ? parseInt(e.target.value) : null)}
-                style={{ ...inputStyle, appearance: "none" }}
-              >
-                <option value="">no specific player</option>
-                {members.map(m => (
-                  <option key={m.user_id} value={m.user_id}>{m.username}</option>
-                ))}
-              </select>
-            </div>
-            <button type="submit" disabled={busy} style={{ ...primaryBtnStyle, opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>
-              {busy ? "…" : "create market"}
-            </button>
-          </form>
-        </section>
-
-        {/* Settle market */}
-        <section>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>SETTLE MARKET</p>
-          {markets.length === 0 ? (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--muted)" }}>no open markets</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <select
-                value={settleId ?? ""}
-                onChange={e => setSettleId(e.target.value ? parseInt(e.target.value) : null)}
-                style={{ ...inputStyle, appearance: "none" }}
-              >
-                <option value="">select market…</option>
-                {markets.map(m => (
-                  <option key={m.market_id} value={m.market_id}>{m.title}</option>
-                ))}
-              </select>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => setSettleSide(true)}
-                  style={{ ...sideBtn, background: settleSide ? "var(--accent)" : "transparent", color: settleSide ? "#000" : "var(--accent)", border: `1px solid ${settleSide ? "var(--accent)" : "var(--border)"}` }}
-                >
-                  YES wins
-                </button>
-                <button
-                  onClick={() => setSettleSide(false)}
-                  style={{ ...sideBtn, background: !settleSide ? "var(--no)" : "transparent", color: !settleSide ? "#fff" : "var(--no)", border: `1px solid ${!settleSide ? "var(--no)" : "var(--border)"}` }}
-                >
-                  NO wins
-                </button>
-              </div>
-              <button onClick={settle} disabled={busy || settleId === null} style={{ ...primaryBtnStyle, opacity: (busy || settleId === null) ? 0.4 : 1, cursor: (busy || settleId === null) ? "not-allowed" : "pointer" }}>
-                {busy ? "…" : "settle"}
-              </button>
-            </div>
-          )}
-        </section>
-
         {/* Top up points */}
-        <section style={{ marginTop: 32 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>TOP UP POINTS</p>
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", fontWeight: 700, margin: "0 0 3px", letterSpacing: "0.06em" }}>
+              GIVE POINTS
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+              Top up a player's balance — useful if someone joins late or runs out.
+            </p>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <select
               value={topupId ?? ""}
@@ -259,11 +383,11 @@ export default function ManagePage() {
               <option value="">select player…</option>
               {members.map(m => (
                 <option key={m.user_id} value={m.user_id}>
-                  {m.username} ({m.points.toFixed(0)} pts)
+                  {m.username} — {m.points.toFixed(0)} pts
                 </option>
               ))}
             </select>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6 }}>
               {[50, 100, 250, 500].map(amt => (
                 <button
                   key={amt}
@@ -280,35 +404,14 @@ export default function ManagePage() {
                 </button>
               ))}
             </div>
-            <button onClick={topup} disabled={busy || topupId === null} style={{ ...primaryBtnStyle, opacity: (busy || topupId === null) ? 0.4 : 1, cursor: (busy || topupId === null) ? "not-allowed" : "pointer" }}>
-              {busy ? "…" : `give ${topupAmt} pts`}
-            </button>
-          </div>
-        </section>
-
-        {/* Ideas shortcut */}
-        <section style={{ marginTop: 32, padding: "16px", background: "var(--surface)", border: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", margin: "0 0 4px" }}>
-                MARKET IDEAS
-              </p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)", margin: 0 }}>
-                {pendingIdeasCount > 0 ? `${pendingIdeasCount} pending review` : "no pending ideas"}
-              </p>
-            </div>
-            <a
-              href="/ideas"
-              style={{
-                padding: "8px 16px", background: pendingIdeasCount > 0 ? "var(--accent)" : "transparent",
-                border: `1px solid ${pendingIdeasCount > 0 ? "var(--accent)" : "var(--border)"}`,
-                color: pendingIdeasCount > 0 ? "#000" : "var(--muted)",
-                fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-                textTransform: "uppercase", textDecoration: "none",
-              }}
+            {topupMsg && <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--accent)", margin: 0 }}>{topupMsg}</p>}
+            <button
+              onClick={topup}
+              disabled={topupBusy || !topupId}
+              style={{ ...primaryBtn, opacity: topupBusy || !topupId ? 0.4 : 1, cursor: topupBusy || !topupId ? "not-allowed" : "pointer" }}
             >
-              review →
-            </a>
+              {topupBusy ? "…" : `give ${topupAmt} pts`}
+            </button>
           </div>
         </section>
 
@@ -318,35 +421,26 @@ export default function ManagePage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  color: "var(--text)",
-  fontFamily: "var(--font-mono)",
-  fontSize: 13,
-  outline: "none",
-  boxSizing: "border-box",
+  width: "100%", padding: "10px 12px",
+  background: "var(--surface)", border: "1px solid var(--border)",
+  color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: 13,
+  outline: "none", boxSizing: "border-box",
 };
 
-const primaryBtnStyle: React.CSSProperties = {
-  padding: "10px",
-  background: "var(--accent)",
-  border: "none",
-  color: "#000",
-  fontFamily: "var(--font-mono)",
-  fontSize: 12,
-  fontWeight: 700,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  cursor: "pointer",
+const labelStyle: React.CSSProperties = {
+  fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)",
 };
 
-const sideBtn: React.CSSProperties = {
-  flex: 1,
+const primaryBtn: React.CSSProperties = {
   padding: "10px",
-  fontFamily: "var(--font-mono)",
-  fontSize: 12,
-  fontWeight: 700,
+  background: "var(--accent)", border: "none", color: "#000",
+  fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
+  letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer",
+};
+
+const outlineBtn: React.CSSProperties = {
+  padding: "8px 12px",
+  background: "transparent", border: "1px solid var(--border)",
+  fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
   cursor: "pointer",
 };
