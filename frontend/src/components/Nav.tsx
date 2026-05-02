@@ -6,7 +6,6 @@ import Token from "./Token";
 import { TokenKey } from "@/lib/tokens";
 import NotificationBell from "./NotificationBell";
 
-// static links — trophies href is filled in dynamically per-user
 const STATIC_LINKS = [
   { href: "/",            label: "markets", className: "nav-markets" },
   { href: "/leaderboard", label: "board",   className: ""            },
@@ -55,20 +54,7 @@ export default function Nav() {
               {l.label}
             </Link>
           ))}
-          {/* Trophies — hidden on mobile (token icon on right already links there) */}
-          <Link
-            href={`/profile/${user.user_id}`}
-            className="nav-trophies"
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 13,
-              color: pathname.startsWith("/profile") ? "var(--text)" : "var(--muted)",
-              textDecoration: "none",
-              padding: "8px 2px",
-            }}
-          >
-            trophies
-          </Link>
+
           {user.group_role === "admin" && (
             <Link
               href="/manage"

@@ -62,7 +62,7 @@ function LandingPage() {
               "Create an account and start a group (or join one via invite link).",
               "Your admin creates markets — or the crew pitches ideas.",
               "Everyone trades YES / NO with their starting points.",
-              "Admin settles each market. Winners earn trophies.",
+              "Admin settles each market. Winners get paid out.",
               "Run it as a one-off or set up a season with weekly drops.",
             ].map((step, i) => (
               <div key={i} style={{ display: "flex", gap: 14, padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
