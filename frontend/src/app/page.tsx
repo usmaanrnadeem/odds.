@@ -242,6 +242,7 @@ export default function HomePage() {
   const [positions,  setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
   const [fetching,   setFetching]  = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [tab, setTab] = useState<"live" | "settled">("live");
 
   useEffect(() => {
     if (!loading && user && !user.group_id && !user.is_admin) router.replace("/join");
@@ -322,25 +323,37 @@ export default function HomePage() {
           </button>
         </div>
 
+        {/* Tab toggle */}
+        <div style={{ display: "flex", marginBottom: 20, borderBottom: "1px solid var(--border)" }}>
+          {(["live", "settled"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.08em",
+                padding: "8px 16px 10px",
+                color: tab === t ? "var(--text)" : "var(--muted)",
+                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
+                marginBottom: -1,
+                transition: "color 0.15s",
+              }}
+            >
+              {t === "live" ? `LIVE${open.length > 0 ? ` · ${open.length}` : ""}` : "SETTLED"}
+            </button>
+          ))}
+        </div>
+
         {fetching ? (
           <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>loading…</p>
+        ) : tab === "live" ? (
+          open.length === 0
+            ? <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>no open markets yet</p>
+            : open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)
         ) : (
-          <>
-            {open.length === 0 && (
-              <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>
-                no open markets yet
-              </p>
-            )}
-            {open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
-            {settled.length > 0 && (
-              <>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", margin: "24px 0 12px" }}>
-                  SETTLED
-                </p>
-                {settled.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)}
-              </>
-            )}
-          </>
+          settled.length === 0
+            ? <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>no settled markets yet</p>
+            : settled.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)
         )}
       </main>
     </>
