@@ -8,16 +8,18 @@ export type TutorialStep = {
   id: string;
   title: string;
   body: string;
-  cta: string;
-  finishButton?: boolean;
-  noMarketFallback?: boolean;
+  cta?: string;            // shown below tooltip when element click is required
+  nextButton?: boolean;    // show "next →" button (no element click needed)
+  finishButton?: boolean;  // show "done ✓" or "next →" depending on isLast
+  noSpotlight?: boolean;   // floating bottom card, no dim, full page visible
+  noMarketFallback?: boolean; // show demo card if market-card element not found
 };
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "nav-markets",
     title: "Your markets",
-    body: "These are the yes/no questions your group is betting on. Each one has live odds that shift with every trade.",
+    body: "This is where all the action is. Each card is a yes/no question your group is betting on — live odds, real stakes.",
     cta: "tap markets to continue",
   },
   {
@@ -30,51 +32,78 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "yes-button",
     title: "Place a bet",
-    body: "Tap YES if you think it'll happen — NO if you don't. Each share pays out 1 pt if you're right. Cheap shares = big upside.",
+    body: "Tap YES if you think it'll happen — NO if you don't. Each share pays 1 pt if you're right. Cheap shares = big upside.",
     cta: "tap YES to continue",
   },
   {
     id: "nav-board",
     title: "The leaderboard",
-    body: "See who's winning across the whole group. Rankings update live with every trade.",
+    body: "See who's winning. Rankings update live with every trade.",
     cta: "tap board to continue",
+  },
+  {
+    id: "landing-board",
+    title: "Rankings, live",
+    body: "Every trade across the group shifts the standings in real time. The person at the top is making the right calls.",
+    nextButton: true,
+    noSpotlight: true,
   },
   {
     id: "nav-chat",
     title: "Group chat",
-    body: "Talk with your group while markets are live. Good for calling your picks and the inevitable trash talk.",
+    body: "Talk with your group while markets are live. Call your picks.",
     cta: "tap chat to continue",
+  },
+  {
+    id: "landing-chat",
+    title: "Chat",
+    body: "Message your group in real time. Good for trash talk, calling your picks, and arguing about the odds.",
+    nextButton: true,
+    noSpotlight: true,
   },
   {
     id: "nav-ideas",
     title: "Pitch a market",
-    body: "Have an idea for a bet? Submit it here. Your admin reviews all pitches and posts the best ones as real markets.",
+    body: "Got an idea for a bet? Submit it here — your admin picks the best ones to post.",
     cta: "tap ideas to continue",
+  },
+  {
+    id: "landing-ideas",
+    title: "Market ideas",
+    body: "Anyone in the group can pitch a market. The admin reviews them and posts the best ones. Your ideas become real bets.",
+    nextButton: true,
+    noSpotlight: true,
   },
   {
     id: "nav-profile",
     title: "Your profile",
-    body: "Track your PnL on every settled market and see your rank. This is your record — wins, losses, and everything in between.",
+    body: "Track your PnL on every settled market and see your rank.",
     cta: "tap your profile to continue",
   },
-  // Admin-only steps (indices 7-8):
+  {
+    id: "landing-profile",
+    title: "Your record",
+    body: "Every market you traded shows here — what you made or lost. This is how you know if your instincts are any good.",
+    finishButton: true,
+    noSpotlight: true,
+  },
+  // Admin-only steps (11-12):
   {
     id: "nav-manage",
-    title: "You're the admin",
-    body: "You have one more tab — manage. This is where you post markets, settle them when the outcome is known, and invite your group.",
+    title: "One more thing",
+    body: "You're also the admin. The manage tab is where you post markets, settle them once you know the outcome, and invite people.",
     cta: "tap manage to continue",
   },
   {
     id: "post-market-form",
     title: "Post your first market",
-    body: "Type a yes/no question and hit post. Your group can start betting right away. You settle it once you know the real-world outcome.",
-    cta: "you're good to go",
+    body: "Type a yes/no question and hit post. Your group can start betting immediately. You settle it once you know the real-world outcome.",
     finishButton: true,
   },
 ];
 
-const USER_MAX_STEP  = 7; // steps 0-6 for regular members
-const ADMIN_MAX_STEP = 9; // steps 0-8 for admins
+const USER_MAX_STEP  = 11; // steps 0-10
+const ADMIN_MAX_STEP = 13; // steps 0-12
 
 type TutorialContextType = {
   step: number;
@@ -105,12 +134,12 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     if (!user?.group_id) return;
     const saved = localStorage.getItem(TUTORIAL_KEY);
     if (saved === null) {
-      // Auto-start for users who've already done onboarding (e.g. existing users)
+      // Auto-start for users who've already done onboarding (returning users)
       if (typeof window !== "undefined" && localStorage.getItem("onboarding_v1_seen")) {
         localStorage.setItem(TUTORIAL_KEY, "0");
         setStep(0);
       }
-      // New users: start() is called by onboarding onDone callback
+      // New users: start() is called from onboarding onDone
     } else {
       const n = parseInt(saved, 10);
       if (!isNaN(n) && n >= 0 && n < maxStep) setStep(n);
