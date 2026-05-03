@@ -89,7 +89,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
         {isOwnProfile && (
           <div style={{ marginBottom: 32, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button
-              onClick={resetTutorial}
+              onClick={() => { resetTutorial(); router.push("/"); }}
               style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer", padding: "8px 14px" }}
             >
               replay tutorial

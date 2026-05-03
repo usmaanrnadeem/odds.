@@ -44,7 +44,7 @@ function JoinPageInner() {
   }, [user, inviteToken, router, refresh]);
 
   // ── Manual join / create ─────────────────────────────────
-  const [tab, setTab] = useState<Tab>("join");
+  const [tab, setTab] = useState<Tab>("create");
 
   const [joinLink,   setJoinLink]   = useState("");
   const [createName, setCreateName] = useState("");
