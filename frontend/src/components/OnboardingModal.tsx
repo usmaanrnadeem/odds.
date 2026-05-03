@@ -194,8 +194,7 @@ export default function OnboardingModal({ startingPts, onDone }: Props) {
     <div style={{
       position: "fixed", inset: 0, zIndex: 400,
       background: "rgba(0,0,0,0.88)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 20,
+      overflowY: "auto",
     }}>
       <style>{`
         @keyframes slide-up {
@@ -204,6 +203,11 @@ export default function OnboardingModal({ startingPts, onDone }: Props) {
         }
       `}</style>
 
+      <div style={{
+        minHeight: "100%",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, boxSizing: "border-box",
+      }}>
       <div
         key={slide}
         style={{
@@ -277,6 +281,7 @@ export default function OnboardingModal({ startingPts, onDone }: Props) {
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
