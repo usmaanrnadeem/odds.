@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "odds.",
   description: "Prediction markets for your friend group",
+  icons: { icon: "/icon", apple: "/icon" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
