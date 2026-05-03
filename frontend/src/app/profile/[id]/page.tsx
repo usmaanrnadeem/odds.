@@ -3,6 +3,7 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { api, MarketPnL, LeaderboardEntry } from "@/lib/api";
 import { useUser } from "@/lib/auth";
+import { useTutorial } from "@/lib/tutorial";
 import Nav from "@/components/Nav";
 import Token from "@/components/Token";
 import { TokenKey } from "@/lib/tokens";
@@ -12,6 +13,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
   const userId = parseInt(id);
   const { user, loading, logout } = useUser();
   const router = useRouter();
+  const { reset: resetTutorial } = useTutorial();
 
   const [pnls,          setPnls]          = useState<MarketPnL[]>([]);
   const [profile,       setProfile]       = useState<LeaderboardEntry | null>(null);
@@ -83,9 +85,15 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
           </div>
         )}
 
-        {/* Logout — own profile only */}
+        {/* Logout + tutorial — own profile only */}
         {isOwnProfile && (
-          <div style={{ marginBottom: 32 }}>
+          <div style={{ marginBottom: 32, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={resetTutorial}
+              style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer", padding: "8px 14px" }}
+            >
+              replay tutorial
+            </button>
             {!confirmLogout ? (
               <button
                 onClick={() => setConfirmLogout(true)}

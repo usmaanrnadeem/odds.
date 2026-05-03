@@ -251,7 +251,7 @@ export default function ManagePage() {
         )}
 
         {/* Post a market */}
-        <section style={{ marginBottom: 32 }}>
+        <section data-tutorial="post-market-form" style={{ marginBottom: 32 }}>
           <div style={{ marginBottom: 14 }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text)", fontWeight: 700, margin: "0 0 3px", letterSpacing: "0.06em" }}>
               POST A MARKET

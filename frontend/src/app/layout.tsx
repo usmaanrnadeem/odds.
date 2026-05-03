@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth";
+import { TutorialProvider } from "@/lib/tutorial";
 import SettlementPopup from "@/components/SettlementPopup";
 import ToastNotifications from "@/components/ToastNotifications";
 import PushSetup from "@/components/PushSetup";
+import TutorialOverlay from "@/components/TutorialOverlay";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -28,10 +30,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
         <AuthProvider>
-          {children}
-          <SettlementPopup />
-          <ToastNotifications />
-          <PushSetup />
+          <TutorialProvider>
+            {children}
+            <SettlementPopup />
+            <ToastNotifications />
+            <PushSetup />
+            <TutorialOverlay />
+          </TutorialProvider>
         </AuthProvider>
       </body>
     </html>

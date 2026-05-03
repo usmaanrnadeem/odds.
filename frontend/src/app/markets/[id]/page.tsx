@@ -280,13 +280,17 @@ export default function MarketPage({ params }: { params: Promise<{ id: string }>
 
             {/* YES / NO */}
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <button onClick={() => setSide(true)} style={{
-                flex: 1, padding: "16px 12px",
-                background: side ? "var(--accent)" : "transparent",
-                border: `1px solid ${side ? "var(--accent)" : "var(--border)"}`,
-                color: side ? "#000" : "var(--accent)",
-                fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
-              }}>
+              <button
+                data-tutorial="yes-button"
+                onClick={() => setSide(true)}
+                style={{
+                  flex: 1, padding: "16px 12px",
+                  background: side ? "var(--accent)" : "transparent",
+                  border: `1px solid ${side ? "var(--accent)" : "var(--border)"}`,
+                  color: side ? "#000" : "var(--accent)",
+                  fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}
+              >
                 YES
               </button>
               <button onClick={() => setSide(false)} style={{

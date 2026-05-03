@@ -7,10 +7,10 @@ import { TokenKey } from "@/lib/tokens";
 import NotificationBell from "./NotificationBell";
 
 const STATIC_LINKS = [
-  { href: "/",            label: "markets", className: "nav-markets" },
-  { href: "/leaderboard", label: "board",   className: ""            },
-  { href: "/chat",        label: "chat",    className: ""            },
-  { href: "/ideas",       label: "ideas",   className: ""            },
+  { href: "/",            label: "markets", className: "nav-markets", tutorial: "nav-markets" },
+  { href: "/leaderboard", label: "board",   className: "",            tutorial: "nav-board"   },
+  { href: "/chat",        label: "chat",    className: "",            tutorial: "nav-chat"    },
+  { href: "/ideas",       label: "ideas",   className: "",            tutorial: "nav-ideas"   },
 ];
 
 export default function Nav() {
@@ -42,6 +42,7 @@ export default function Nav() {
               key={l.href}
               href={l.href}
               className={l.className || undefined}
+              data-tutorial={l.tutorial}
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: 13,
@@ -57,6 +58,7 @@ export default function Nav() {
           {user.group_role === "admin" && (
             <Link
               href="/manage"
+              data-tutorial="nav-manage"
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: 13,
@@ -90,6 +92,7 @@ export default function Nav() {
         {/* User — points + token link to profile */}
         <Link
           href={`/profile/${user.user_id}`}
+          data-tutorial="nav-profile"
           style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
         >
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>

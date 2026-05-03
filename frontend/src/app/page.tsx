@@ -8,6 +8,7 @@ import Nav from "@/components/Nav";
 import Token from "@/components/Token";
 import { TokenKey } from "@/lib/tokens";
 import OnboardingModal, { hasSeenOnboarding } from "@/components/OnboardingModal";
+import { useTutorial } from "@/lib/tutorial";
 
 function LandingPage() {
   const FEATURES = [
@@ -155,7 +156,7 @@ function MarketTitle({ title, username, tokenKey }: { title: string; username: s
   );
 }
 
-function MarketCard({ market, position }: { market: Market; position?: { yes: number; no: number } }) {
+function MarketCard({ market, position, tutorialTarget }: { market: Market; position?: { yes: number; no: number }; tutorialTarget?: boolean }) {
   const settled = market.status === "settled";
   const isClosed = !settled && market.closes_at != null && new Date(market.closes_at) < new Date();
   const hasYes = (position?.yes ?? 0) > 0;
@@ -163,6 +164,7 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
   return (
     <Link href={`/markets/${market.market_id}`} style={{ textDecoration: "none" }}>
       <div
+        data-tutorial={tutorialTarget ? "market-card-first" : undefined}
         style={{
           padding: "16px",
           background: "var(--surface)",
@@ -238,6 +240,7 @@ function MarketCard({ market, position }: { market: Market; position?: { yes: nu
 export default function HomePage() {
   const { user, loading } = useUser();
   const router = useRouter();
+  const { start: startTutorial } = useTutorial();
   const [markets,    setMarkets]   = useState<Market[]>([]);
   const [positions,  setPositions] = useState<Map<number, { yes: number; no: number }>>(new Map());
   const [fetching,   setFetching]  = useState(true);
@@ -300,7 +303,7 @@ export default function HomePage() {
       {showOnboarding && (
         <OnboardingModal
           startingPts={user.points}
-          onDone={() => setShowOnboarding(false)}
+          onDone={() => { setShowOnboarding(false); startTutorial(); }}
         />
       )}
       <main className="page-content">
@@ -349,7 +352,7 @@ export default function HomePage() {
         ) : tab === "live" ? (
           open.length === 0
             ? <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>no open markets yet</p>
-            : open.map(m => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} />)
+            : open.map((m, i) => <MarketCard key={m.market_id} market={m} position={positions.get(m.market_id)} tutorialTarget={i === 0} />)
         ) : (
           settled.length === 0
             ? <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted)", fontSize: 13 }}>no settled markets yet</p>
