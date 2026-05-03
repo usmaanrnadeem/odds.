@@ -47,11 +47,17 @@ export default function TutorialOverlay() {
     const poll = setInterval(() => {
       const el = document.querySelector(`[data-tutorial="${currentStep.id}"]`) as HTMLElement | null;
       if (el) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) {
+          // Element exists but is hidden (e.g. display:none on mobile)
+          clearInterval(poll);
+          setNotFound(true);
+          return;
+        }
         clearInterval(poll);
         prevEl.current?.removeAttribute("data-tutorial-active");
         el.setAttribute("data-tutorial-active", "true");
         prevEl.current = el;
-        const r = el.getBoundingClientRect();
         setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
         return;
       }
@@ -179,29 +185,34 @@ export default function TutorialOverlay() {
     );
   }
 
-  // ── Generic not-found ─────────────────────────────────────────
+  // ── Generic not-found — same bottom card as noSpotlight ──────
   if (notFound) {
     return (
       <>
         <style>{TUTORIAL_CSS}</style>
-        <div style={{ position: "fixed", inset: 0, background: OVERLAY_BG, zIndex: OVERLAY_Z }} />
         <div style={{
-          position: "fixed", left: 16, right: 16,
-          top: "50%", transform: "translateY(-50%)",
-          background: "var(--canvas)", border: "1px solid var(--border)",
-          padding: "20px", zIndex: TOOLTIP_Z,
+          position: "fixed", bottom: 0, left: 0, right: 0,
+          zIndex: TOOLTIP_Z,
+          background: "var(--canvas)",
+          borderTop: "1px solid var(--border)",
+          padding: "20px 20px 28px",
+          boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--accent)", letterSpacing: "0.2em" }}>
-              {step + 1} / {totalSteps}
-            </span>
-            <button onClick={skipAll} style={skipBtnStyle}>skip tutorial</button>
+          <div style={{ maxWidth: 480, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--accent)", letterSpacing: "0.2em" }}>
+                {step + 1} / {totalSteps}
+              </span>
+              <button onClick={skipAll} style={skipBtnStyle}>skip tutorial</button>
+            </div>
+            <p style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", margin: "0 0 8px", lineHeight: 1.3 }}>
+              {currentStep.title}
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", lineHeight: 1.65, margin: "0 0 16px" }}>
+              {currentStep.body}
+            </p>
+            <button onClick={advance} style={nextBtnStyle}>next →</button>
           </div>
-          <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 8px" }}>{currentStep.title}</p>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted)", lineHeight: 1.65, margin: "0 0 14px" }}>
-            {currentStep.body}
-          </p>
-          <button onClick={advance} style={nextBtnStyle}>skip this step →</button>
         </div>
       </>
     );
