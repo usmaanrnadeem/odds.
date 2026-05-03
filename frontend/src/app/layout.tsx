@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { AuthProvider } from "@/lib/auth";
 import { TutorialProvider } from "@/lib/tutorial";
 import SettlementPopup from "@/components/SettlementPopup";
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <TutorialOverlay />
           </TutorialProvider>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
