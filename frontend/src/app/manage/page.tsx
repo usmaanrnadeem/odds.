@@ -5,6 +5,7 @@ import { api, Market, ApiError, GroupMember } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import Nav from "@/components/Nav";
 import AdminOnboardingModal, { hasSeenAdminOnboarding, markAdminOnboardingSeen } from "@/components/AdminOnboardingModal";
+import { useTutorial } from "@/lib/tutorial";
 
 // ── Settle row ────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ function SettleRow({ market, onSettled }: { market: Market; onSettled: (id: numb
 export default function ManagePage() {
   const { user, loading } = useUser();
   const router = useRouter();
+  const { isActive: tutorialActive, initialized: tutorialInitialized } = useTutorial();
 
   const [markets,    setMarkets]    = useState<Market[]>([]);
   const [members,    setMembers]    = useState<GroupMember[]>([]);
@@ -128,8 +130,14 @@ export default function ManagePage() {
     api.groupMembers().then(setMembers);
     api.pendingIdeas().then(ideas => setPendingIdeasCount(ideas.length)).catch(() => {});
     api.myGroup().then(g => setJoinToken(g.join_token ?? null)).catch(() => {});
-    if (!hasSeenAdminOnboarding()) setShowGuide(true);
   }, [user]);
+
+  // Show admin guide only after tutorial is done — wait for tutorial to initialize
+  // from localStorage before checking, to avoid a race on first render
+  useEffect(() => {
+    if (!tutorialInitialized) return;
+    if (!tutorialActive && !hasSeenAdminOnboarding()) setShowGuide(true);
+  }, [tutorialInitialized, tutorialActive]);
 
   async function postMarket(e: React.FormEvent) {
     e.preventDefault();

@@ -108,6 +108,7 @@ const ADMIN_MAX_STEP = 13; // steps 0-12
 type TutorialContextType = {
   step: number;
   isActive: boolean;
+  initialized: boolean;
   currentStep: TutorialStep | null;
   totalSteps: number;
   start: () => void;
@@ -118,7 +119,7 @@ type TutorialContextType = {
 };
 
 const Ctx = createContext<TutorialContextType>({
-  step: -1, isActive: false, currentStep: null, totalSteps: USER_MAX_STEP,
+  step: -1, isActive: false, initialized: false, currentStep: null, totalSteps: USER_MAX_STEP,
   start: () => {}, advance: () => {}, skipSteps: () => {}, skipAll: () => {}, reset: () => {},
 });
 
@@ -127,6 +128,7 @@ export const useTutorial = () => useContext(Ctx);
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const [step, setStep] = useState(-1);
+  const [initialized, setInitialized] = useState(false);
 
   const maxStep = user?.group_role === "admin" ? ADMIN_MAX_STEP : USER_MAX_STEP;
 
@@ -144,6 +146,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
       const n = parseInt(saved, 10);
       if (!isNaN(n) && n >= 0 && n < maxStep) setStep(n);
     }
+    setInitialized(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id]);
 
@@ -192,7 +195,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const currentStep = isActive ? TUTORIAL_STEPS[step] : null;
 
   return (
-    <Ctx.Provider value={{ step, isActive, currentStep, totalSteps: maxStep, start, advance, skipSteps, skipAll, reset }}>
+    <Ctx.Provider value={{ step, isActive, initialized, currentStep, totalSteps: maxStep, start, advance, skipSteps, skipAll, reset }}>
       {children}
     </Ctx.Provider>
   );
