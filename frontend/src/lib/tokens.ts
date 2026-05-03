@@ -18,27 +18,7 @@ export const PALETTE: Record<string, string> = {
 };
 
 export type StandardTokenKey = "wizard" | "rocket" | "fox" | "knight" | "shark" | "bull" | "ghost" | "dragon";
-export type CustomTokenKey = "p_ati" | "p_finn" | "p_ritz" | "p_esele" | "p_nugith" | "p_alex" | "p_usmaan" | "p_chethan";
-export type TokenKey = StandardTokenKey | CustomTokenKey;
-
-export const CUSTOM_TOKEN_KEYS: CustomTokenKey[] = [
-  "p_ati", "p_finn", "p_ritz", "p_esele", "p_nugith", "p_alex", "p_usmaan", "p_chethan",
-];
-
-export const CUSTOM_TOKEN_LABELS: Record<CustomTokenKey, string> = {
-  p_ati:     "ati",
-  p_finn:    "finn",
-  p_ritz:    "ritz",
-  p_esele:   "esele",
-  p_nugith:  "nugith",
-  p_alex:    "alex",
-  p_usmaan:  "usmaan",
-  p_chethan: "chethan",
-};
-
-export function isCustomToken(key: TokenKey): key is CustomTokenKey {
-  return key.startsWith("p_");
-}
+export type TokenKey = StandardTokenKey;
 
 // Each string is a row of 16 chars
 const TOKENS: Record<StandardTokenKey, string[]> = {
@@ -206,7 +186,7 @@ export function drawToken(
   }
 }
 
-export const TOKEN_KEYS: TokenKey[] = [
+export const TOKEN_KEYS: StandardTokenKey[] = [
   "wizard", "rocket", "fox", "knight", "shark", "bull", "ghost", "dragon",
 ];
 

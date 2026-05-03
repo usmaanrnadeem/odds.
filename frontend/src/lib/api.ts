@@ -341,12 +341,14 @@ export type GroupMember = {
 };
 
 export function connectWS(onEvent: (e: WSEvent) => void): () => void {
-  const url = BASE.replace(/^http/, "ws") + "/ws";
+  const base = BASE.replace(/^http/, "ws") + "/ws";
   let ws: WebSocket;
   let dead = false;
 
   function connect() {
-    ws = new WebSocket(url);
+    const token = tokenStore.get();
+    if (!token) return; // not logged in — don't connect
+    ws = new WebSocket(`${base}?token=${encodeURIComponent(token)}`);
     ws.onmessage = (e) => {
       try {
         onEvent(JSON.parse(e.data) as WSEvent);

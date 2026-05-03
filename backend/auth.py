@@ -52,6 +52,14 @@ def _decode_token(token: str) -> dict:
         )
 
 
+def decode_ws_token(token: str) -> dict | None:
+    """Decode a JWT for WebSocket auth — returns None instead of raising."""
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+
+
 # ── FastAPI dependencies ─────────────────────────────────────
 
 def get_current_user(

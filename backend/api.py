@@ -10,14 +10,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
 import asyncpg
-from fastapi import Depends, FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import lmsr
 from .auth import (
     create_token,
+    decode_ws_token,
     get_current_user,
 )
+from . import ratelimit
 from .bots import start_bots, stop_bots
 from .db import close_pool, get_pool, init_pool
 from .push import send_push_to_user, VAPID_PUBLIC_KEY
@@ -80,8 +82,8 @@ async def _push_notification(pool: asyncpg.Pool, user_id: int, notif_type: str,
         created_at=row["created_at"].isoformat(),
     )
     asyncio.create_task(
-        manager.broadcast(
-            WSNotificationEvent(user_id=user_id, notification=out.model_dump()).model_dump()
+        manager.send_to_user(
+            user_id, WSNotificationEvent(user_id=user_id, notification=out.model_dump()).model_dump()
         )
     )
     # Device push (fire-and-forget)
@@ -273,7 +275,10 @@ async def _require_market(pool: asyncpg.Pool, market_id: int) -> asyncpg.Record:
 # ── Auth routes ──────────────────────────────────────────────
 
 @app.post("/auth/register", response_model=UserOut)
-async def register(body: RegisterRequest, response: Response):
+async def register(body: RegisterRequest, request: Request, response: Response):
+    ip = request.client.host if request.client else "unknown"
+    if not ratelimit.check(f"register:{ip}", 5, 60):
+        raise HTTPException(status_code=429, detail="Too many registration attempts")
     pool = get_pool()
     async with pool.acquire() as con:
         if await con.fetchrow("SELECT 1 FROM users WHERE username = $1", body.username):
@@ -296,7 +301,10 @@ async def register(body: RegisterRequest, response: Response):
 
 
 @app.post("/auth/login", response_model=UserOut)
-async def login(body: LoginRequest, response: Response):
+async def login(body: LoginRequest, request: Request, response: Response):
+    ip = request.client.host if request.client else "unknown"
+    if not ratelimit.check(f"login:{ip}", 10, 60):
+        raise HTTPException(status_code=429, detail="Too many login attempts")
     pool = get_pool()
     row = await pool.fetchrow(
         """
@@ -551,11 +559,12 @@ async def send_market_chat(market_id: int, body: MessageIn, current: Annotated[d
     out = MessageOut(message_id=msg["id"], user_id=current["user_id"],
                      username=user_row["username"], token_key=user_row["token_key"],
                      content=body.content, created_at=msg["created_at"].isoformat())
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        row["group_id"],
         WSChatEvent(scope="market", scope_id=market_id, message_id=msg["id"],
                     user_id=current["user_id"], username=user_row["username"],
                     token_key=user_row["token_key"], content=body.content,
-                    created_at=msg["created_at"].isoformat()).model_dump()
+                    created_at=msg["created_at"].isoformat()).model_dump(),
     )
     # Notify market participants (fire-and-forget)
     preview = body.content if len(body.content) <= 40 else body.content[:37] + "..."
@@ -604,11 +613,12 @@ async def send_group_chat(body: MessageIn, current: Annotated[dict, Depends(get_
     out = MessageOut(message_id=msg["id"], user_id=current["user_id"],
                      username=user_row["username"], token_key=user_row["token_key"],
                      content=body.content, created_at=msg["created_at"].isoformat())
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        group_id,
         WSChatEvent(scope="group", scope_id=group_id, message_id=msg["id"],
                     user_id=current["user_id"], username=user_row["username"],
                     token_key=user_row["token_key"], content=body.content,
-                    created_at=msg["created_at"].isoformat()).model_dump()
+                    created_at=msg["created_at"].isoformat()).model_dump(),
     )
     # Notify all other group members
     preview = body.content if len(body.content) <= 40 else body.content[:37] + "..."
@@ -687,8 +697,11 @@ async def all_my_positions(current: Annotated[dict, Depends(get_current_user)]):
 
 
 @app.get("/markets/{market_id}/price_arc", response_model=list[float])
-async def market_price_arc(market_id: int, _: Annotated[dict, Depends(get_current_user)]):
+async def market_price_arc(market_id: int, current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
+    mkt = await _require_market(pool, market_id)
+    if not current["is_admin"] and mkt["group_id"] != current.get("group_id"):
+        raise HTTPException(status_code=404, detail="Market not found")
     rows = await pool.fetch(
         "SELECT yes_prob FROM market_prices WHERE marketID = $1 ORDER BY timestamp",
         market_id,
@@ -697,9 +710,12 @@ async def market_price_arc(market_id: int, _: Annotated[dict, Depends(get_curren
 
 
 @app.get("/markets/{market_id}/activity", response_model=list[FeedEntry])
-async def market_activity(market_id: int, _: Annotated[dict, Depends(get_current_user)]):
+async def market_activity(market_id: int, current: Annotated[dict, Depends(get_current_user)]):
     """Human trades only — bots filtered out."""
     pool = get_pool()
+    mkt = await _require_market(pool, market_id)
+    if not current["is_admin"] and mkt["group_id"] != current.get("group_id"):
+        raise HTTPException(status_code=404, detail="Market not found")
     rows = await pool.fetch(
         """
         SELECT t.tradeID, u.username, u.token_key, t.side, t.quantity, t.cost, t.is_sell, t.timestamp
@@ -732,6 +748,8 @@ async def buy(
     body: BuyRequest,
     current: Annotated[dict, Depends(get_current_user)],
 ):
+    if not ratelimit.check(f"trade:{current['user_id']}", 30, 60):
+        raise HTTPException(status_code=429, detail="Too many trades — slow down")
     pool = get_pool()
     lock = market_cache.get_lock(market_id)
 
@@ -852,7 +870,8 @@ async def buy(
         cost=cost,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        state["group_id"],
         WSTradeEvent(
             market_id=market_id,
             yes_prob=yes_prob,
@@ -860,11 +879,12 @@ async def buy(
             yes_odds=lmsr.decimal_odds(yes_prob),
             no_odds=lmsr.decimal_odds(no_prob),
             feed_entry=feed_entry,
-        ).model_dump()
+        ).model_dump(),
     )
     asyncio.create_task(
-        manager.broadcast(
-            WSBalanceUpdateEvent(user_id=current["user_id"], new_balance=new_balance).model_dump()
+        manager.send_to_user(
+            current["user_id"],
+            WSBalanceUpdateEvent(user_id=current["user_id"], new_balance=new_balance).model_dump(),
         )
     )
 
@@ -898,6 +918,8 @@ async def sell(
     body: SellRequest,
     current: Annotated[dict, Depends(get_current_user)],
 ):
+    if not ratelimit.check(f"trade:{current['user_id']}", 30, 60):
+        raise HTTPException(status_code=429, detail="Too many trades — slow down")
     pool = get_pool()
     lock = market_cache.get_lock(market_id)
 
@@ -1014,7 +1036,8 @@ async def sell(
         cost=payout,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        state["group_id"],
         WSTradeEvent(
             market_id=market_id,
             yes_prob=yes_prob,
@@ -1022,11 +1045,12 @@ async def sell(
             yes_odds=lmsr.decimal_odds(yes_prob),
             no_odds=lmsr.decimal_odds(no_prob),
             feed_entry=feed_entry,
-        ).model_dump()
+        ).model_dump(),
     )
     asyncio.create_task(
-        manager.broadcast(
-            WSBalanceUpdateEvent(user_id=current["user_id"], new_balance=new_balance).model_dump()
+        manager.send_to_user(
+            current["user_id"],
+            WSBalanceUpdateEvent(user_id=current["user_id"], new_balance=new_balance).model_dump(),
         )
     )
 
@@ -1129,12 +1153,11 @@ async def push_unsubscribe(body: dict, current: Annotated[dict, Depends(get_curr
 async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
     group_id = current.get("group_id")
-    if not group_id and not current["is_admin"]:
+    if not group_id:
         return []
 
-    user_filter = "WHERE u.is_admin = FALSE" if (current["is_admin"] and not group_id) else ""
-    group_join  = "JOIN group_memberships gm ON gm.user_id = u.userid AND gm.group_id = $1" if group_id else ""
-    args        = (group_id,) if group_id else ()
+    group_join = "JOIN group_memberships gm ON gm.user_id = u.userid AND gm.group_id = $1"
+    args       = (group_id,)
 
     rows = await pool.fetch(
         f"""
@@ -1148,7 +1171,6 @@ async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
         {group_join}
         LEFT JOIN trades t ON t.userID = u.userID
         LEFT JOIN markets m ON m.marketID = t.marketID
-        {user_filter}
         GROUP BY u.userID
         """,
         *args,
@@ -1212,8 +1234,18 @@ async def leaderboard(current: Annotated[dict, Depends(get_current_user)]):
 # ── Trophies ─────────────────────────────────────────────────
 
 @app.get("/users/{user_id}/market-pnl", response_model=list[MarketPnLOut])
-async def user_market_pnl(user_id: int, _: Annotated[dict, Depends(get_current_user)]):
+async def user_market_pnl(user_id: int, current: Annotated[dict, Depends(get_current_user)]):
     pool = get_pool()
+    if not current["is_admin"] and current["user_id"] != user_id:
+        group_id = current.get("group_id")
+        if not group_id:
+            raise HTTPException(status_code=403, detail="Not authorised")
+        in_group = await pool.fetchrow(
+            "SELECT 1 FROM group_memberships WHERE user_id = $1 AND group_id = $2",
+            user_id, group_id,
+        )
+        if not in_group:
+            raise HTTPException(status_code=403, detail="Not in your group")
     rows = await pool.fetch(
         """
         SELECT
@@ -1298,12 +1330,13 @@ async def create_market(
                        (SELECT token_key FROM users WHERE userid = $7) AS subject_token_key""",
         body.title, body.description, body.b, current["user_id"], group_id, closes_at_dt, body.subject_user_id,
     )
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        group_id,
         WSMarketCreatedEvent(
             market_id=row["marketid"],
             title=row["title"],
             closes_at=row["closes_at"].isoformat() if row["closes_at"] else None,
-        ).model_dump()
+        ).model_dump(),
     )
     return _market_out(row)
 
@@ -1322,7 +1355,7 @@ async def approve_market(
     )
     if not row:
         raise HTTPException(status_code=400, detail="Market not found or not pending")
-    await manager.broadcast({"type": "market_approved", "market_id": market_id})
+    await manager.broadcast_to_group(row["group_id"], {"type": "market_approved", "market_id": market_id})
     return _market_out(row)
 
 
@@ -1453,7 +1486,8 @@ async def settle_market(
 
     # Broadcast settlement event
     winner = podium[0] if podium else None
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        market["group_id"],
         WSSettlementEvent(
             market_id=market_id,
             market_title=market["title"],
@@ -1463,7 +1497,7 @@ async def settle_market(
             winner_profit=winner["profit"] if winner else 0,
             podium=podium,
             price_arc=arc,
-        ).model_dump()
+        ).model_dump(),
     )
 
     # Notify all participants about settlement
@@ -1673,12 +1707,13 @@ async def approve_idea(
         "b": float(mkt["b"]), "yes_qty": 0.0, "no_qty": 0.0,
         "status": "open", "group_id": group_id, "closes_at": closes_at_dt,
     }
-    await manager.broadcast(
+    await manager.broadcast_to_group(
+        group_id,
         WSMarketCreatedEvent(
             market_id=mkt["marketid"],
             title=mkt["title"],
             closes_at=mkt["closes_at"].isoformat() if mkt["closes_at"] else None,
-        ).model_dump()
+        ).model_dump(),
     )
     # Notify the submitter that their idea became a market
     submitter_id = idea["submitted_by"]
@@ -1751,7 +1786,17 @@ async def reject_idea(
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    await manager.connect(ws)
+    token = ws.query_params.get("token")
+    payload = decode_ws_token(token) if token else None
+    if not payload:
+        await ws.close(code=4001)
+        return
+    user_id = int(payload["sub"])
+    group_id = payload.get("gid")
+    if not group_id:
+        await ws.close(code=4001)
+        return
+    await manager.connect(ws, group_id, user_id)
     try:
         while True:
             # Keep alive — clients may send pings
